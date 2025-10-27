@@ -9,10 +9,9 @@
  * \brief Code to choose nodes randomly based on restrictions and
  *   weighted probabilities.
  **/
-
 #define NODE_SELECT_PRIVATE
 #include "core/or/or.h"
-
+#include "feature/hs/hs_experiment.h"
 #include "app/config/config.h"
 #include "core/mainloop/connection.h"
 #include "core/or/policies.h"
@@ -40,7 +39,7 @@
 #include "feature/nodelist/node_st.h"
 #include "feature/nodelist/routerinfo_st.h"
 #include "feature/nodelist/routerstatus_st.h"
-
+#include "lib/crypt_ops/crypto_format.h"
 static int compute_weighted_bandwidths(const smartlist_t *sl,
                                        bandwidth_weight_rule_t rule,
                                        double **bandwidths_out,
@@ -945,7 +944,6 @@ router_choose_random_node_helper(smartlist_t *excludednodes,
 {
   smartlist_t *sl=smartlist_new();
   const node_t *choice = NULL;
-
   router_add_running_nodes_to_smartlist(sl, flags);
   log_debug(LD_CIRC,
            "We found %d running nodes.",
@@ -959,8 +957,67 @@ router_choose_random_node_helper(smartlist_t *excludednodes,
               "We removed excludedset, leaving %d nodes.",
               smartlist_len(sl));
   }
+#if RUN_IP_INTERSECTION_EXPERIMENT
+  static int counter = 0;
+  if(counter>0)
+  {
+	  printf("Skipping checking of nodes\n");
+  }
+  if (counter == 0) {
+    uint8_t intro_id[DIGEST_LEN], mid_id[DIGEST_LEN];
+    int have_intro_id = 0, have_mid_id = 0;
 
-  // Always weight by bandwidth
+    /* Prepare digests for comparison (40 hex chars → 20 bytes) */
+    if (FORCED_INTRO_FP_HEX[0] &&
+        base16_decode((char*)intro_id, sizeof(intro_id),
+                      FORCED_INTRO_FP_HEX, strlen(FORCED_INTRO_FP_HEX))
+          == DIGEST_LEN) {
+      have_intro_id = 1;
+    }
+    if (FORCED_MID_FP_HEX[0] &&
+        base16_decode((char*)mid_id, sizeof(mid_id),
+                      FORCED_MID_FP_HEX, strlen(FORCED_MID_FP_HEX))
+          == DIGEST_LEN) {
+      have_mid_id = 1;
+    }
+
+    SMARTLIST_FOREACH_BEGIN(sl, const node_t *, n) {
+      int is_forced_intro = 0, is_forced_mid = 0;
+
+      /* Match by fingerprint (RSA identity digest) */
+      if (n->identity) {
+        if (have_intro_id && tor_memeq(n->identity, intro_id, DIGEST_LEN))
+          is_forced_intro = 1;
+        if (have_mid_id && tor_memeq(n->identity, mid_id, DIGEST_LEN))
+          is_forced_mid = 1;
+      }
+
+      /* Fallback: match by nickname */
+      if (n->ri && n->ri->nickname) {
+        if (!is_forced_intro && FORCED_INTRO_NICK[0] &&
+            !strcasecmp(n->ri->nickname, FORCED_INTRO_NICK))
+          is_forced_intro = 1;
+        if (!is_forced_mid && FORCED_MID_NICK[0] &&
+            !strcasecmp(n->ri->nickname, FORCED_MID_NICK))
+          is_forced_mid = 1;
+      }
+
+      if (is_forced_intro) {
+        printf("[FOUND FORCED INTRO] %s\n", node_describe(n));
+      }
+      if (is_forced_mid) {
+        printf("[FOUND FORCED MIDDLE] %s\n", node_describe(n));
+      }
+    } SMARTLIST_FOREACH_END(n);
+
+    fflush(stdout);
+  } else {
+    printf("Skipped printing because it is not the first time\n");
+    fflush(stdout);
+  }
+  counter++;
+#endif /* RUN_IP_INTERSECTION_EXPERIMENT */
+// Always weight by bandwidth
   choice = node_sl_choose_by_bandwidth(sl, rule);
 
   smartlist_free(sl);

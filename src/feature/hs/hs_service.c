@@ -7,7 +7,7 @@
  **/
 
 #define HS_SERVICE_PRIVATE
-
+#include "feature/hs/hs_experiment.h"
 #include "core/or/or.h"
 #include "app/config/config.h"
 #include "app/config/statefile.h"
@@ -124,6 +124,53 @@ static int service_encode_descriptor(const hs_service_t *service,
                                      const hs_service_descriptor_t *desc,
                                      const ed25519_keypair_t *signing_kp,
                                      char **encoded_out);
+/* Build a human-readable hop list for an origin circuit:
+ *   $FP1(Nick1),$FP2(Nick2),$FP3(Nick3)
+ * Returns true if it wrote something to buf. */
+static bool
+hs_build_circuit_path_string(const origin_circuit_t *oc,
+                             char *buf, size_t buflen,
+                             const extend_info_t **out_last_hop_ei)
+{
+  if (!oc || !oc->cpath || buflen == 0) return false;
+
+  buf[0] = '\0';
+  size_t off = 0;
+  int hop_idx = 0;
+  const crypt_path_t *last = NULL;
+
+  for (const crypt_path_t *hop = oc->cpath; hop; hop = hop->next, hop_idx++) {
+    last = hop;
+
+    const extend_info_t *ei = NULL;
+    /* Most trees keep extend_info on each hop. */
+    ei = hop->extend_info;
+
+    char fp_hex[ED25519_PUBKEY_LEN*2 + 1];
+    const char *nick = "(no-nick)";
+
+    if (ei) {
+      base16_encode(fp_hex, sizeof(fp_hex),
+                    (const char*)ei->ed_identity.pubkey, ED25519_PUBKEY_LEN);
+      if (ei->nickname && ei->nickname[0]) nick = ei->nickname;
+    } else {
+      strlcpy(fp_hex, "????????", sizeof(fp_hex));
+    }
+
+    int n = tor_snprintf(buf + off, buflen - off,
+                         "%s$%s(%s)", (hop_idx==0) ? "" : ",", fp_hex, nick);
+    if (n < 0 || (size_t)n >= buflen - off) break;
+    off += (size_t)n;
+
+    /* cpath may be circular; stop when we loop back. */
+    if (hop->next == oc->cpath) break;
+  }
+
+  if (out_last_hop_ei)
+    *out_last_hop_ei = last ? last->extend_info : NULL;
+
+  return off > 0;
+}
 
 /** Helper: Function to compare two objects in the service map. Return 1 if the
  * two service have the same master public identity key. */
@@ -136,7 +183,6 @@ hs_service_ht_eq(const hs_service_t *first, const hs_service_t *second)
   return ed25519_pubkey_eq(&first->keys.identity_pk,
                            &second->keys.identity_pk);
 }
-
 /** Helper: Function for the service hash table code below. The key used is the
  * master public identity key which is ultimately the onion address. */
 static inline unsigned int
@@ -146,7 +192,64 @@ hs_service_ht_hash(const hs_service_t *service)
   return (unsigned int) siphash24g(service->keys.identity_pk.pubkey,
                                    sizeof(service->keys.identity_pk.pubkey));
 }
+#if RUN_IP_INTERSECTION_EXPERIMENT
+/* Print an intro circuit: ESTABLISHED (S_INTRO) prints full path;
+ * BUILDING (S_ESTABLISH_INTRO) prints any hops picked so far. */
+static void
+dump_intro_circuit_any(const origin_circuit_t *circ)
+{
+  if (!circ) return;
 
+  const char *phase =
+    (circ->base_.purpose == CIRCUIT_PURPOSE_S_INTRO &&
+     circ->path_state   == PATH_STATE_BUILD_SUCCEEDED)
+      ? "ESTABLISHED"
+      : (circ->base_.purpose == CIRCUIT_PURPOSE_S_ESTABLISH_INTRO
+         ? "BUILDING"
+         : "OTHER");
+
+  printf("Intro circuit %u (gid=%" PRIu32 ") [%s]:\n",
+         TO_CIRCUIT(circ)->n_circ_id, circ->global_identifier, phase);
+
+  if (!circ->cpath) {
+    printf("  (no cpath yet)\n");
+    fflush(stdout);
+    return;
+  }
+
+  const crypt_path_t *head = circ->cpath, *hop = head;
+  int idx = 0;
+  do {
+    const extend_info_t *ei = hop->extend_info;
+    const char *desc = ei ? extend_info_describe(ei) : "(null extend_info)";
+    printf("  hop %d: %s\n", idx, desc);
+    hop = hop->next;
+    ++idx;
+  } while (hop && hop != head);
+
+  fflush(stdout);
+}
+
+/* Walk the service’s descriptor maps and print any intro circuits we find. */
+static void
+debug_dump_all_intro_circuits(hs_service_t *service)
+{
+  if (!service) return;
+
+  FOR_EACH_DESCRIPTOR_BEGIN(service, desc) {
+    DIGEST256MAP_FOREACH(desc->intro_points.map, key,
+                         hs_service_intro_point_t *, ip) {
+      origin_circuit_t *circ = hs_circ_service_get_intro_circ(ip);
+      if (circ) {
+        dump_intro_circuit_any(circ);
+      } else {
+        /* No circuit object attached yet for this intro point. */
+        /* printf("  (no circuit yet for one intro point)\n"); */
+      }
+    } DIGEST256MAP_FOREACH_END;
+  } FOR_EACH_DESCRIPTOR_END;
+}
+#endif /* RUN_IP_INTERSECTION_EXPERIMENT */
 /** This is _the_ global hash map of hidden services which indexes the services
  * contained in it by master public identity key which is roughly the onion
  * address of the service. */
@@ -213,7 +316,6 @@ register_service(hs_service_ht *map, hs_service_t *service)
 
   return 0;
 }
-
 /** Remove a given service from the given map. If service is NULL or the
  * service key is unset, return gracefully. */
 STATIC void
@@ -2140,9 +2242,30 @@ build_descriptors_for_new_service(hs_service_t *service, time_t now)
                     "built. Now scheduled for upload.",
            safe_str_client(service->onion_address));
 }
+/** Debug helper: Print all intro point relays for a descriptor. */
+static void
+log_intro_points_for_descriptor(const hs_service_t *service,
+                                const hs_service_descriptor_t *desc)
+{
+  if (!desc || !desc->intro_points.map)
+    return;
 
-/** Build descriptors for each service if needed. There are conditions to build
- * a descriptor which are details in the function. */
+  DIGEST256MAP_FOREACH(desc->intro_points.map, key,
+                       const hs_service_intro_point_t *, ip) {
+    const node_t *node = get_node_from_intro_point(ip);
+    if (node) {
+      log_info(LD_REND,
+               "Hidden service %s has intro point relay: %s (%s)",
+               safe_str_client(service->onion_address),
+               node_get_nickname(node),
+               node_describe(node));
+    } else {
+      log_info(LD_REND,
+               "Hidden service %s has intro point with unknown node",
+               safe_str_client(service->onion_address));
+    }
+  } DIGEST256MAP_FOREACH_END;
+}
 STATIC void
 build_all_descriptors(time_t now)
 {
@@ -2170,10 +2293,12 @@ build_all_descriptors(time_t now)
       log_info(LD_REND, "Hidden service %s next descriptor successfully "
                         "built. Now scheduled for upload.",
                safe_str_client(service->onion_address));
+      printf("niaou222222\n");
+log_intro_points_for_descriptor(service, service->desc_next);
+log_intro_points_for_descriptor(service, service->desc_current);
     }
   } FOR_EACH_DESCRIPTOR_END;
 }
-
 /** Randomly pick a node to become an introduction point but not present in the
  * given exclude_nodes list. The chosen node is put in the exclude list
  * regardless of success or not because in case of failure, the node is simply
@@ -2284,10 +2409,50 @@ pick_needed_intro_points(hs_service_t *service,
   setup_intro_point_exclude_list(desc, exclude_nodes);
 
   for (i = 0; i < num_needed_ip; i++) {
-    hs_service_intro_point_t *ip;
+    hs_service_intro_point_t *ip=NULL;
+#if RUN_IP_INTERSECTION_EXPERIMENT
+    /* Force the FIRST (i == 0) intro point to a specific relay, if present. */
+    if (i == 0) {
+      const node_t *forced_node = NULL;
 
-    /* This function will add the picked intro point node to the exclude nodes
+      /* 1) Try fingerprint (best). Convert 40-hex -> 20-byte digest. */
+      if (FORCED_INTRO_FP_HEX && FORCED_INTRO_FP_HEX[0]) {
+        char id[DIGEST_LEN]; /* binary SHA1 identity */
+        if (base16_decode(id, sizeof(id),
+                          FORCED_INTRO_FP_HEX, strlen(FORCED_INTRO_FP_HEX))
+              == DIGEST_LEN) {
+          forced_node = node_get_by_id((const char*)id);
+        }
+      }
+      /* 2) Fallback to nickname if fingerprint not found / not set. */
+      if (!forced_node && FORCED_INTRO_NICK && FORCED_INTRO_NICK[0]) {
+        forced_node = node_get_by_nickname(FORCED_INTRO_NICK, 0);
+      }
+
+      if (forced_node) {
+        /* Don’t duplicate within this batch. */
+        if (!smartlist_contains(exclude_nodes, forced_node)) {
+          ip = service_intro_point_new(forced_node);
+          if (ip) {
+            smartlist_add(exclude_nodes, (void*)forced_node);
+            printf("Experiment: forced FIRST intro point: %s\n",
+                   node_describe(forced_node));
+          } else {
+            printf("Experiment: failed to create intro object for %s\n",
+                   node_describe(forced_node));
+          }
+        } else {
+          printf("Experiment: forced node already excluded: %s\n",
+                 node_describe(forced_node));
+        }
+      } else {
+        printf("Experiment: forced intro node not found in nodelist.\n");
+      }
+    }
+#endif /* RUN_IP_INTERSECTION_EXPERIMENT */
+   /* This function will add the picked intro point node to the exclude nodes
      * list so we don't pick the same one at the next iteration. */
+   if(ip==NULL){
     ip = pick_intro_point(service->config.is_single_onion, exclude_nodes);
     if (ip == NULL) {
       /* If we end up unable to pick an introduction point it is because we
@@ -2298,7 +2463,7 @@ pick_needed_intro_points(hs_service_t *service,
                safe_str_client(service->onion_address));
       goto done;
     }
-
+   }
     /* Save a copy of the specific version of the blinded ID that we
      * use to reach this intro point. Needed to validate proof-of-work
      * solutions that are bound to this specific service. */
@@ -2967,13 +3132,22 @@ static void
 launch_intro_point_circuits(hs_service_t *service)
 {
   tor_assert(service);
+ #if RUN_IP_INTERSECTION_EXPERIMENT
+  static int s_intro_launch_count = 0;
+#endif
 
   /* For both descriptors, try to launch any missing introduction point
    * circuits using the current map. */
   FOR_EACH_DESCRIPTOR_BEGIN(service, desc) {
     /* Keep a ref on if we need a direct connection. We use this often. */
     bool direct_conn = service->config.is_single_onion;
-
+    #if RUN_IP_INTERSECTION_EXPERIMENT
+      if (s_intro_launch_count == 0) {
+    g_hs_force_layer2_for_next_intro = 1;   /* one-shot */
+    printf("Experiment: arming one-shot Layer2 forcing for first intro circuit\n");
+    }
+      s_intro_launch_count++;
+#endif
     DIGEST256MAP_FOREACH_MODIFY(desc->intro_points.map, key,
                                 hs_service_intro_point_t *, ip) {
       extend_info_t *ei;
@@ -3013,6 +3187,10 @@ launch_intro_point_circuits(hs_service_t *service)
       extend_info_free(ei);
     } DIGEST256MAP_FOREACH_END;
   } FOR_EACH_DESCRIPTOR_END;
+//#if RUN_IP_INTERSECTION_EXPERIMENT
+  /* <-- This prints all intro circuits we currently know about */
+//  debug_dump_all_intro_circuits(service);
+//#endif
 }
 
 /** Don't try to build more than this many circuits before giving up for a
@@ -4434,6 +4612,26 @@ hs_service_receive_intro_established(origin_circuit_t *circ,
   if (ret < 0) {
     goto err;
   }
+  char path_buf[512];
+  memset(path_buf, 0, sizeof(path_buf));
+
+  hs_service_t *service = NULL;
+  hs_service_intro_point_t *ip = NULL;
+  hs_service_descriptor_t *desc = NULL;
+
+  if (circ->hs_ident) {
+    get_objects_from_ident(circ->hs_ident, &service, &ip, &desc);
+  }
+
+  if (hs_build_circuit_path_string(circ, path_buf, sizeof(path_buf), NULL)) {
+  printf("HS intro circuit path for %s: %s\n",
+         service ? service->onion_address : "(unknown)",
+         path_buf);
+  } else {
+  printf("HS intro circuit path for %s: [unavailable]\n",
+         service ? service->onion_address : "(unknown)");
+  }
+
   return 0;
  err:
   circuit_mark_for_close(TO_CIRCUIT(circ), END_CIRC_REASON_TORPROTOCOL);

@@ -36,7 +36,7 @@
 #include "lib/crypt_ops/crypto_rand.h"
 #include "lib/crypt_ops/crypto_util.h"
 #include "lib/time/compat_time.h"
-
+#include "feature/nodelist/networkstatus.h"
 /* Trunnel. */
 #include "trunnel/ed25519_cert.h"
 #include "trunnel/hs/cell_establish_intro.h"
@@ -47,7 +47,7 @@
 #include "core/or/extend_info_st.h"
 #include "feature/nodelist/node_st.h"
 #include "core/or/origin_circuit_st.h"
-
+#include "feature/hs/hs_timing.h"
 /** Helper: Free a pending rend object. */
 static inline void
 free_pending_rend(pending_rend_t *req)
@@ -87,6 +87,46 @@ circuit_purpose_is_correct_for_rend(unsigned int circ_purpose,
   return 1;
 }
 
+/* Debug: print the hops of a *finished* introduction circuit */
+static void
+debug_print_intro_circuit_path(const origin_circuit_t *circ)
+{
+	return;
+
+  if (!circ)
+    return;
+
+  /* Only print after the circuit became a live intro circuit */
+  if (circ->base_.purpose != CIRCUIT_PURPOSE_S_INTRO ||
+      circ->path_state != PATH_STATE_BUILD_SUCCEEDED) {
+    return;
+  }
+
+  printf("FUN2 Intro circuit %u (gid=%" PRIu32 "):\n",
+         TO_CIRCUIT(circ)->n_circ_id, circ->global_identifier);
+
+  if (!circ->cpath) {
+    printf("  (no cpath yet)\n");
+    fflush(stdout);
+    return;
+  }
+
+  /* crypt_path_t is a ring; walk it once */
+  const crypt_path_t *head = circ->cpath;
+  const crypt_path_t *hop  = head;
+  int idx = 0;
+
+  do {
+    const extend_info_t *ei = hop->extend_info;
+    const char *desc = ei ? extend_info_describe(ei) : "(null extend_info)";
+    printf("  hop %d: %s\n", idx, desc);
+
+    hop = hop->next;
+    ++idx;
+  } while (hop && hop != head);
+
+  fflush(stdout);
+}
 /** Create and return a crypt path for the final hop of a v3 prop224 rendezvous
  * circuit. Initialize the crypt path crypto using the output material from the
  * ntor key exchange at <b>ntor_key_seed</b>.
@@ -1063,6 +1103,18 @@ hs_circ_launch_intro_point(hs_service_t *service,
   service->state.num_intro_circ_launched++;
   circ = circuit_launch_by_extend_info(CIRCUIT_PURPOSE_S_ESTABLISH_INTRO,
                                        ei, circ_flags);
+/* === DEBUG: print vanguard status when building intro circuits === */
+int vanguards_enabled = networkstatus_get_param(NULL, "vanguards-enabled", 1, 0, 1);
+
+
+/* If your version doesn’t have a vanguard-level function, just print 0. */
+/* Otherwise, you could hook this into hs_vanguards.c to print actual levels. */
+
+printf("[HS_DEBUG] Building intro circuit for service %s "
+       "(vanguards-enabled=%d)\n",
+       safe_str_client(service->onion_address),
+       vanguards_enabled);
+debug_print_intro_circuit_path(circ);
   if (circ == NULL) {
     goto end;
   }
@@ -1511,6 +1563,11 @@ hs_circ_send_introduce1(origin_circuit_t *intro_circ,
              TO_CIRCUIT(intro_circ)->n_circ_id);
     goto done;
   }
+  /* --- INSERT TIMING CSV LOG HERE --- */
+  hs_timing_csv_append("INTRODUCE1_SENT",
+                       (void*)rend_circ,
+                       (const void*)rend_circ->hs_ident->rendezvous_cookie,
+                       sizeof(rend_circ->hs_ident->rendezvous_cookie));
 
   /* Success. */
   ret = 0;

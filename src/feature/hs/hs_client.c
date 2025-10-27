@@ -36,6 +36,7 @@
 #include "feature/nodelist/microdesc.h"
 #include "feature/nodelist/networkstatus.h"
 #include "feature/nodelist/nodelist.h"
+#include "feature/hs/hs_timing.h"
 #include "feature/nodelist/routerset.h"
 #include "lib/crypt_ops/crypto_format.h"
 #include "lib/crypt_ops/crypto_rand.h"
@@ -1074,18 +1075,19 @@ client_get_random_intro(const ed25519_public_key_t *service_pk)
   usable_ips = smartlist_new();
   smartlist_add_all(usable_ips, enc_data->intro_points);
   while (smartlist_len(usable_ips) != 0) {
-    int idx;
+    int idx=0;
     const hs_desc_intro_point_t *ip;
 
     /* Pick a random intro point and immediately remove it from the usable
      * list so we don't pick it again if we have to iterate more. */
-    idx = crypto_rand_int(smartlist_len(usable_ips));
+    //idx = crypto_rand_int(smartlist_len(usable_ips));
     ip = smartlist_get(usable_ips, idx);
     smartlist_del(usable_ips, idx);
 
     /* We need to make sure we have a usable intro points which is in a good
      * state in our cache. */
     if (!intro_point_is_usable(service_pk, ip)) {
+	printf("The deterministic introduction point 0 is not usable");
       continue;
     }
 
@@ -1098,6 +1100,7 @@ client_get_random_intro(const ed25519_public_key_t *service_pk)
                "for service %s, because we could not extend to it.",
                safe_str_client(ed25519_fmt(&ip->auth_key_cert->signed_key)),
                safe_str_client(onion_address));
+      printf("SOmething went wrong with the deterministic introduction point 0\n");
       continue;
     }
 
@@ -1113,6 +1116,7 @@ client_get_random_intro(const ed25519_public_key_t *service_pk)
         extend_info_free(ei_excluded);
       }
       ei_excluded = ei;
+      printf("something went wrong with the det introduction point 0 \n");
       continue;
     }
 
@@ -1442,6 +1446,10 @@ handle_rendezvous2(origin_circuit_t *circ, const uint8_t *payload,
     goto err;
   }
   /* Success. Hidden service connection finalized! */
+      hs_timing_csv_append("RENDEZVOUS2_RECV",
+                           (void*)circ,
+                           (const void*)circ->hs_ident->rendezvous_cookie,
+                           sizeof(circ->hs_ident->rendezvous_cookie));
   ret = 0;
   goto end;
 

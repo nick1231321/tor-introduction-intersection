@@ -236,6 +236,26 @@ circuit_is_acceptable(const origin_circuit_t *origin_circ,
   return 1;
 }
 
+/* small helper in this file */
+static void dump_intro_cpath(const origin_circuit_t *circ)
+{
+	return;
+  if (!circ || !circ->cpath) return;
+
+  printf("Intro circuit ESTABLISHED %u (gid=%" PRIu32 "):\n",
+         TO_CIRCUIT(circ)->n_circ_id, circ->global_identifier);
+
+  const crypt_path_t *head = circ->cpath, *hop = head;
+  int idx = 0;
+  do {
+    const extend_info_t *ei = hop->extend_info;
+    const char *desc = ei ? extend_info_describe(ei) : "(null extend_info)";
+    printf("  hop %d: %s\n", idx, desc);
+    hop = hop->next;
+    ++idx;
+  } while (hop && hop != head);
+  fflush(stdout);
+}
 /** Return 1 if circuit <b>a</b> is better than circuit <b>b</b> for
  * <b>conn</b>, and return 0 otherwise. Used by circuit_get_best.
  */
@@ -3144,6 +3164,12 @@ circuit_change_purpose(circuit_t *circ, uint8_t new_purpose)
                                           old_purpose);
 
     circpad_machine_event_circ_purpose_changed(TO_ORIGIN_CIRCUIT(circ));
+  }
+
+  if (old_purpose == CIRCUIT_PURPOSE_S_ESTABLISH_INTRO &&
+      circ->purpose   == CIRCUIT_PURPOSE_S_INTRO) {
+    origin_circuit_t *oc = TO_ORIGIN_CIRCUIT(circ);
+    if (oc) dump_intro_cpath(oc);
   }
 }
 

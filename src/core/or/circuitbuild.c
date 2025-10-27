@@ -26,7 +26,7 @@
 
 #define CIRCUITBUILD_PRIVATE
 #define OCIRC_EVENT_PRIVATE
-
+#include "lib/encoding/binascii.h"     // base16_decode
 #include "core/or/or.h"
 #include "app/config/config.h"
 #include "lib/confmgt/confmgt.h"
@@ -82,11 +82,15 @@
 #include "feature/nodelist/node_st.h"
 #include "core/or/or_circuit_st.h"
 #include "core/or/origin_circuit_st.h"
-
+#include "feature/hs/hs_experiment.h"
 #include "trunnel/extension.h"
 #include "trunnel/congestion_control.h"
 #include "trunnel/subproto_request.h"
+/* One-shot flag: when set to 1, force the first middle hop (Layer-2)
+ * for the *next* service-side intro circuit only. */
 
+/* single definition of the one-shot flag */
+int g_hs_force_layer2_for_next_intro = 0;
 static int circuit_send_first_onion_skin(origin_circuit_t *circ);
 static int circuit_build_no_more_hops(origin_circuit_t *circ);
 static int circuit_send_intermediate_onion_skin(origin_circuit_t *circ,
@@ -2416,7 +2420,51 @@ choose_good_middle_server(const origin_circuit_t * circ,
     smartlist_free(excluded);
     return choice;
   }
+ #if RUN_IP_INTERSECTION_EXPERIMENT
+  /* --------- FORCE FIRST MIDDLE of FIRST INTRO CIRCUIT (one-shot) --------- */
+  if (purpose == CIRCUIT_PURPOSE_S_ESTABLISH_INTRO &&
+      cur_len == 1 &&
+      g_hs_force_layer2_for_next_intro) {
 
+    const node_t *forced = NULL;
+    char id[DIGEST_LEN]; /* binary SHA1 (20 bytes) */
+
+    /* Prefer fingerprint (40-hex) over nickname. */
+    if (FORCED_MID_FP_HEX[0] &&
+        base16_decode(id, DIGEST_LEN,
+                      FORCED_MID_FP_HEX, strlen(FORCED_MID_FP_HEX))
+          == DIGEST_LEN) {
+      forced = node_get_by_id((const char *)id);
+    }
+    if (!forced && FORCED_MID_NICK[0]) {
+      forced = node_get_by_nickname(FORCED_MID_NICK, 0);
+    }
+
+    if (forced) {
+      /* Ensure it's not excluded, and is usable under current flags. */
+      if (!smartlist_contains(excluded, forced) &&
+          router_can_choose_node(forced, flags)) {
+        printf("Experiment: forcing HS Layer2 (first middle): %s\n",
+               node_describe(forced));
+        fflush(stdout);
+        g_hs_force_layer2_for_next_intro = 0; /* consume one-shot */
+        smartlist_free(excluded);
+        return forced;
+      } else {
+        printf("Experiment: forced HS Layer2 not usable or excluded: %s\n",
+               node_describe(forced));
+        fflush(stdout);
+        g_hs_force_layer2_for_next_intro = 0; /* still consume one-shot */
+        /* fall through to normal selection */
+      }
+    } else {
+      printf("Experiment: forced HS Layer2 node not found\n");
+      fflush(stdout);
+      g_hs_force_layer2_for_next_intro = 0;   /* consume anyway */
+      /* fall through */
+    }
+  }
+#endif /* RUN_IP_INTERSECTION_EXPERIMENT */
   if (options->MiddleNodes) {
     smartlist_t *sl = smartlist_new();
     routerset_get_all_nodes(sl, options->MiddleNodes,
