@@ -2096,6 +2096,8 @@ onion_pick_cpath_exit(origin_circuit_t *circ, extend_info_t *exit_ei)
     state->desired_path_len = 1;
   } else {
     int r = new_route_len(circ->base_.purpose, exit_ei, nodelist_get_list());
+    if(circ->base_.purpose==CIRCUIT_PURPOSE_S_ESTABLISH_INTRO)
+      printf("The length of the introduction cricuit is %d \n",r);
     if (r < 1) /* must be at least 1 */
       return -1;
     state->desired_path_len = r;
@@ -2105,6 +2107,8 @@ onion_pick_cpath_exit(origin_circuit_t *circ, extend_info_t *exit_ei)
     warn_if_last_router_excluded(circ, exit_ei);
     log_info(LD_CIRC,"Using requested exit node '%s'",
              extend_info_describe(exit_ei));
+	if(circ->base_.purpose==CIRCUIT_PURPOSE_S_ESTABLISH_INTRO)
+	printf("Using requested exit node for intro point %s \n",extend_info_describe(exit_ei));
     exit_ei = extend_info_dup(exit_ei);
   } else { /* we have to decide one */
     router_crn_flags_t flags = CRN_NEED_DESC;
@@ -2566,8 +2570,27 @@ onion_extend_cpath(origin_circuit_t *circ)
   if (cur_len == state->desired_path_len - 1) { /* Picking last node */
     info = extend_info_dup(state->chosen_exit);
   } else if (cur_len == 0) { /* picking first node */
-    const node_t *r = choose_good_entry_server(circ, purpose, state,
+    const node_t *r = NULL;
+  if (circ->base_.purpose == CIRCUIT_PURPOSE_S_ESTABLISH_INTRO && strcmp(state->chosen_exit->nickname,FORCED_INTRO_NICK)==0)
+  {
+      if (FORCED_ENTRY_FP_HEX && FORCED_ENTRY_FP_HEX[0]) {
+      char id[DIGEST_LEN]; /* binary SHA1 identity */
+      if (base16_decode(id, sizeof(id),
+                        FORCED_ENTRY_FP_HEX, strlen(FORCED_ENTRY_FP_HEX))
+            == DIGEST_LEN) {
+        r = node_get_by_id((const char*)id);
+        if(r!=NULL)
+        printf("Forced entry node for our intro circuit %s \n",node_describe(r));
+      }
+    }
+
+  }
+  else
+  {
+    r = choose_good_entry_server(circ, purpose, state,
                                                &circ->guard_state);
+    }
+      
     if (r) {
       /* If we're a client, use the preferred address rather than the
          primary address, for potentially connecting to an IPv6 OR
@@ -2578,8 +2601,40 @@ onion_extend_cpath(origin_circuit_t *circ)
       tor_assert_nonfatal(info || client);
     }
   } else {
-    const node_t *r =
-      choose_good_middle_server(circ, purpose, state, circ->cpath, cur_len);
+    const node_t * r = NULL;
+      if (circ->base_.purpose == CIRCUIT_PURPOSE_S_ESTABLISH_INTRO && strcmp(state->chosen_exit->nickname,FORCED_INTRO_NICK)==0)
+      {
+        if(cur_len==1)
+        {
+            if (FORCED_VANGUARD_FP_HEX && FORCED_VANGUARD_FP_HEX[0]) {
+            char id[DIGEST_LEN]; /* binary SHA1 identity */
+            if (base16_decode(id, sizeof(id),
+                              FORCED_VANGUARD_FP_HEX, strlen(FORCED_VANGUARD_FP_HEX))
+                  == DIGEST_LEN) {
+              r = node_get_by_id((const char*)id);
+              if(r!=NULL)
+                printf("Forced vanguard node %s for our intro circuit\n",node_describe(r));
+            }
+          }
+        }
+        if(cur_len==2)
+        {
+            if (FORCED_MID_FP_HEX && FORCED_MID_FP_HEX[0]) {
+            char id[DIGEST_LEN]; /* binary SHA1 identity */
+            if (base16_decode(id, sizeof(id),
+                              FORCED_MID_FP_HEX, strlen(FORCED_MID_FP_HEX))
+                  == DIGEST_LEN) {
+              r = node_get_by_id((const char*)id);
+              if(r!=NULL)
+                printf("Forced middle node  %sfor our intro circuit\n",node_describe(r));
+            }
+          }
+        }
+      }
+      else
+      {
+          r =    choose_good_middle_server(circ, purpose, state, circ->cpath, cur_len);
+      }
     if (r) {
       info = extend_info_from_node(r, 0, false);
     }
@@ -2610,7 +2665,6 @@ onion_extend_cpath(origin_circuit_t *circ)
   extend_info_free(info);
   return 0;
 }
-
 /** Return the node_t for the chosen exit router in <b>state</b>.
  * If there is no chosen exit, or if we don't know the node_t for
  * the chosen exit, return NULL.

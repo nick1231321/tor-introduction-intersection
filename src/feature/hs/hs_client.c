@@ -49,9 +49,11 @@
 #include "core/or/extend_info_st.h"
 #include "core/or/origin_circuit_st.h"
 #include "core/or/socks_request_st.h"
-
+#include "feature/nodelist/node_st.h"
 #include "trunnel/hs/cell_introduce1.h"
-
+#include "feature/hs/hs_experiment.h"
+#include "feature/nodelist/routerlist.h"
+#include "feature/nodelist/routerinfo_st.h"
 /** This event is activated when we are notified that directory information has
  * changed. It must be done asynchronous from the call due to possible
  * recursion from the caller of that notification. See #40579. */

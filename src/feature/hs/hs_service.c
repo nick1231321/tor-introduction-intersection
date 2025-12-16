@@ -2293,7 +2293,6 @@ build_all_descriptors(time_t now)
       log_info(LD_REND, "Hidden service %s next descriptor successfully "
                         "built. Now scheduled for upload.",
                safe_str_client(service->onion_address));
-      printf("niaou222222\n");
 log_intro_points_for_descriptor(service, service->desc_next);
 log_intro_points_for_descriptor(service, service->desc_current);
     }
@@ -2391,7 +2390,9 @@ pick_needed_intro_points(hs_service_t *service,
    * 'General' internal circuits and then we'll drop them from the list of
    * intro points. */
   if (digest256map_size(desc->intro_points.map) == 0) {
+	printf("Num of needed ip before extra: %d",num_needed_ip);
     num_needed_ip += get_intro_point_num_extra();
+    printf("Num of needed ip after extra: %d",num_needed_ip);
   }
 
   /* Build an exclude list of nodes of our intro point(s). The expiring intro
@@ -2407,8 +2408,8 @@ pick_needed_intro_points(hs_service_t *service,
   /* Also, add the failing intro points that our descriptor encounteered in
    * the exclude node list. */
   setup_intro_point_exclude_list(desc, exclude_nodes);
-
-  for (i = 0; i < num_needed_ip; i++) {
+//for(i=0;i<num_needed_ip;i++)
+  for (i = 0; i < 1; i++) {
     hs_service_intro_point_t *ip=NULL;
 #if RUN_IP_INTERSECTION_EXPERIMENT
     /* Force the FIRST (i == 0) intro point to a specific relay, if present. */
@@ -2431,7 +2432,6 @@ pick_needed_intro_points(hs_service_t *service,
 
       if (forced_node) {
         /* Don’t duplicate within this batch. */
-        if (!smartlist_contains(exclude_nodes, forced_node)) {
           ip = service_intro_point_new(forced_node);
           if (ip) {
             smartlist_add(exclude_nodes, (void*)forced_node);
@@ -2441,10 +2441,7 @@ pick_needed_intro_points(hs_service_t *service,
             printf("Experiment: failed to create intro object for %s\n",
                    node_describe(forced_node));
           }
-        } else {
-          printf("Experiment: forced node already excluded: %s\n",
-                 node_describe(forced_node));
-        }
+         
       } else {
         printf("Experiment: forced intro node not found in nodelist.\n");
       }

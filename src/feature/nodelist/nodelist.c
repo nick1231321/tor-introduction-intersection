@@ -39,7 +39,7 @@
  */
 
 #define NODELIST_PRIVATE
-
+#define ENABLE_RELAY_COUNTRY_EXPORT
 #include "core/or/or.h"
 #include "app/config/config.h"
 #include "core/mainloop/mainloop.h"
@@ -2636,16 +2636,72 @@ compute_frac_paths_available(const networkstatus_t *consensus,
                              int *num_present_out, int *num_usable_out,
                              char **status_out)
 {
+#ifdef ENABLE_RELAY_COUNTRY_EXPORT
+  static int did_run = 0;
+#endif
   smartlist_t *guards = smartlist_new();
   smartlist_t *mid    = smartlist_new();
   smartlist_t *exits  = smartlist_new();
   double f_guard, f_mid, f_exit;
   double f_path = 0.0;
+  /* For local per-role counts */
+  int mid_np = 0,  mid_nu = 0;  /* present / usable for middles   */
+  int grd_np = 0,  grd_nu = 0;  /* present / usable for guards    */
+  int ext_np = 0,  ext_nu = 0;  /* present / usable for exits     */
+
+  const int authdir = authdir_mode_v3(options);
+
+  /* ----- MIDDLE ----- */
+  count_usable_descriptors(&mid_np, &mid_nu,
+                           mid, consensus, now, options->MiddleNodes,
+                           USABLE_DESCRIPTOR_ALL);
+
+  /* Print middles: smartlist_len(mid) == mid_np */
+  printf("TOR COUNTS: middle: present=%d usable=%d (list=%d)\n",
+         mid_np, mid_nu, smartlist_len(mid));
+  /* or via Tor logger: */
+  log_notice(LD_GENERAL, "TOR COUNTS: middle: present=%d usable=%d (list=%d)",
+             mid_np, mid_nu, smartlist_len(mid));
+
+  /* ----- GUARD (ENTRY) ----- */
+  if (options->EntryNodes) {
+    count_usable_descriptors(&grd_np, &grd_nu,
+                             guards, consensus, now,
+                             options->EntryNodes, USABLE_DESCRIPTOR_ALL);
+  } else {
+    SMARTLIST_FOREACH(mid, const node_t *, node, {
+      if (authdir) {
+        if (node->rs && node->rs->is_possible_guard)
+          smartlist_add(guards, (node_t*)node);
+      } else {
+        if (node->is_possible_guard)
+          smartlist_add(guards, (node_t*)node);
+      }
+    });
+    /* When deriving from middles we don't have “present/usable”
+       from count_usable_descriptors, so we just show the list size. */
+    grd_np = smartlist_len(guards);
+    grd_nu = grd_np;  /* best effort display */
+  }
+
+  printf("TOR COUNTS: guard:  present=%d usable=%d (list=%d)\n",
+         grd_np, grd_nu, smartlist_len(guards));
+  log_notice(LD_GENERAL, "TOR COUNTS: guard:  present=%d usable=%d (list=%d)",
+             grd_np, grd_nu, smartlist_len(guards));
+
+  /* ----- EXIT ----- */
+  count_usable_descriptors(&ext_np, &ext_nu,
+                           exits, consensus, now,
+                           NULL, USABLE_DESCRIPTOR_EXIT_POLICY_AND_FLAG);
+
+  printf("TOR COUNTS: exit:   present=%d usable=%d (list=%d)\n",
+         ext_np, ext_nu, smartlist_len(exits));
+  log_notice(LD_GENERAL, "TOR COUNTS: exit:   present=%d usable=%d (list=%d)",
+             ext_np, ext_nu, smartlist_len(exits));
   /* Used to determine whether there are any exits in the consensus */
   int np = 0;
   /* Used to determine whether there are any exits with descriptors */
   int nu = 0;
-  const int authdir = authdir_mode_v3(options);
 
   count_usable_descriptors(num_present_out, num_usable_out,
                            mid, consensus, now, options->MiddleNodes,
@@ -2822,7 +2878,39 @@ compute_frac_paths_available(const networkstatus_t *consensus,
                   "exit bw" :
                   "end bw (no exits in consensus, using mid)"),
                  (int)(f_path*100));
+#ifdef ENABLE_RELAY_COUNTRY_EXPORT
+  if (!did_run) {
+      did_run = 1;
+printf("printing countries\n");
+      const smartlist_t *all_nodes = nodelist_get_list();
+      FILE *csv = tor_fopen_cloexec("/tmp/tor_relay_countries.csv", "w");
+      if (csv) {
+          fprintf(csv, "fingerprint,nickname,ip,country\n");
 
+          SMARTLIST_FOREACH_BEGIN(all_nodes, const node_t *, node) {
+              char fp[HEX_DIGEST_LEN + 1];
+              char ip[64] = "";
+              const char *nickname = node_get_nickname(node);
+              const char *country = geoip_get_country_name(node->country);
+
+              /* RSA fingerprint */
+              base16_encode(fp, sizeof(fp),
+                            (const char *)node->identity, DIGEST_LEN);
+
+              /* Node IPv4 string */
+              node_get_address_string(node, ip, sizeof(ip));
+
+              fprintf(csv, "%s,%s,%s,%s\n",
+                      fp,
+                      nickname ? nickname : "",
+                      ip,
+                      country ? country : "");
+          } SMARTLIST_FOREACH_END(node);
+
+          fclose(csv);
+      }
+  }
+#endif
   return f_path;
 }
 
@@ -2838,7 +2926,8 @@ count_loading_descriptors_progress(void)
   const networkstatus_t *consensus =
     networkstatus_get_reasonably_live_consensus(now,usable_consensus_flavor());
   double paths, fraction;
-
+  /* (…keep the rest of the original function unchanged…) */
+  /* Update have_consensus_path, compute f_guard/f_mid/f_exit, etc. */
   if (!consensus)
     return 0; /* can't count descriptors if we have no list of them */
 
@@ -2966,3 +3055,4 @@ update_router_have_minimum_dir_info(void)
   have_min_dir_info = res;
   need_to_update_have_min_dir_info = 0;
 }
+

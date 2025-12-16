@@ -959,40 +959,58 @@ router_choose_random_node_helper(smartlist_t *excludednodes,
   }
 #if RUN_IP_INTERSECTION_EXPERIMENT
   static int counter = 0;
-  if(counter>0)
-  {
-	  printf("Skipping checking of nodes\n");
-  }
+//  if (counter > 0) {
+  //  printf("Skipping checking of nodes (already done once)\n");
+//  }
+
   if (counter == 0) {
     uint8_t intro_id[DIGEST_LEN], mid_id[DIGEST_LEN];
+    uint8_t vanguard_id[DIGEST_LEN], entry_id[DIGEST_LEN];
     int have_intro_id = 0, have_mid_id = 0;
+    int have_vanguard_id = 0, have_entry_id = 0;
 
-    /* Prepare digests for comparison (40 hex chars → 20 bytes) */
+    /* Decode 40-hex RSA identities → 20-byte digests */
     if (FORCED_INTRO_FP_HEX[0] &&
         base16_decode((char*)intro_id, sizeof(intro_id),
                       FORCED_INTRO_FP_HEX, strlen(FORCED_INTRO_FP_HEX))
-          == DIGEST_LEN) {
+          == DIGEST_LEN)
       have_intro_id = 1;
-    }
+
     if (FORCED_MID_FP_HEX[0] &&
         base16_decode((char*)mid_id, sizeof(mid_id),
                       FORCED_MID_FP_HEX, strlen(FORCED_MID_FP_HEX))
-          == DIGEST_LEN) {
+          == DIGEST_LEN)
       have_mid_id = 1;
-    }
+
+    if (FORCED_VANGUARD_FP_HEX[0] &&
+        base16_decode((char*)vanguard_id, sizeof(vanguard_id),
+                      FORCED_VANGUARD_FP_HEX, strlen(FORCED_VANGUARD_FP_HEX))
+          == DIGEST_LEN)
+      have_vanguard_id = 1;
+
+    if (FORCED_ENTRY_FP_HEX[0] &&
+        base16_decode((char*)entry_id, sizeof(entry_id),
+                      FORCED_ENTRY_FP_HEX, strlen(FORCED_ENTRY_FP_HEX))
+          == DIGEST_LEN)
+      have_entry_id = 1;
 
     SMARTLIST_FOREACH_BEGIN(sl, const node_t *, n) {
       int is_forced_intro = 0, is_forced_mid = 0;
+      int is_forced_vanguard = 0, is_forced_entry = 0;
 
-      /* Match by fingerprint (RSA identity digest) */
+      /* --- Match by fingerprint (RSA identity digest) --- */
       if (n->identity) {
         if (have_intro_id && tor_memeq(n->identity, intro_id, DIGEST_LEN))
           is_forced_intro = 1;
         if (have_mid_id && tor_memeq(n->identity, mid_id, DIGEST_LEN))
           is_forced_mid = 1;
+        if (have_vanguard_id && tor_memeq(n->identity, vanguard_id, DIGEST_LEN))
+          is_forced_vanguard = 1;
+        if (have_entry_id && tor_memeq(n->identity, entry_id, DIGEST_LEN))
+          is_forced_entry = 1;
       }
 
-      /* Fallback: match by nickname */
+      /* --- Fallback: match by nickname --- */
       if (n->ri && n->ri->nickname) {
         if (!is_forced_intro && FORCED_INTRO_NICK[0] &&
             !strcasecmp(n->ri->nickname, FORCED_INTRO_NICK))
@@ -1000,14 +1018,23 @@ router_choose_random_node_helper(smartlist_t *excludednodes,
         if (!is_forced_mid && FORCED_MID_NICK[0] &&
             !strcasecmp(n->ri->nickname, FORCED_MID_NICK))
           is_forced_mid = 1;
+        if (!is_forced_vanguard && FORCED_VANGUARD_NICK[0] &&
+            !strcasecmp(n->ri->nickname, FORCED_VANGUARD_NICK))
+          is_forced_vanguard = 1;
+        if (!is_forced_entry && FORCED_ENTRY_NICK[0] &&
+            !strcasecmp(n->ri->nickname, FORCED_ENTRY_NICK))
+          is_forced_entry = 1;
       }
 
-      if (is_forced_intro) {
+      /* --- Print any matches --- */
+      if (is_forced_intro)
         printf("[FOUND FORCED INTRO] %s\n", node_describe(n));
-      }
-      if (is_forced_mid) {
+      if (is_forced_mid)
         printf("[FOUND FORCED MIDDLE] %s\n", node_describe(n));
-      }
+      if (is_forced_vanguard)
+        printf("[FOUND FORCED VANGUARD] %s\n", node_describe(n));
+      if (is_forced_entry)
+        printf("[FOUND FORCED ENTRY] %s\n", node_describe(n));
     } SMARTLIST_FOREACH_END(n);
 
     fflush(stdout);
