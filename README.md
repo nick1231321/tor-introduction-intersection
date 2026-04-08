@@ -37,16 +37,6 @@ The colocated client serves two purposes:
 2. It sends control signals to the intersector plugin (`packet_logger_scripts/last_node/packet_processer.py`), enabling online construction of anonymity sets and computation of intersections during the experiment.
 ## Build
 
-To build Tor from source:
-
-```
-./configure
-make
-make install
-```
-
-To build Tor from a just-cloned git repository:
-
 ```
 ./autogen.sh
 ./configure
