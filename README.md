@@ -177,3 +177,47 @@ chmod +x /exp/runner.sh
 ```
 
 Also verify that the paths are correct and logs are written to `/exp/runner.log`.
+
+
+## Reproducing Figures and Tables
+
+To reproduce the results presented in the paper, use the following scripts.
+
+### Figures 2 and 3
+
+Run:
+
+```
+python3 produce_graphs/generate_stats_and_graphs.py
+```
+
+This script processes the collected experiment data and generates the statistics and plots used in Figures 2 and 3.
+
+---
+
+### Table 1
+
+Run:
+
+```
+python3 produce_graphs/measure_introduce_time.py
+```
+
+Before running the script, modify the following variables:
+
+- `TARGET_URLS`  
+  Set this to the list of onion services you want to measure. The script will trigger the introduction protocol and measure the `INTRODUCE1`--`RENDEZVOUS2` latency.
+
+- `CSV_PATH`  
+  Path where results will be stored. Example:
+  ```
+  CSV_PATH = "/tmp/tor_hs_timing.csv"
+  ```
+
+- `PROXY_CMD`  
+  Path to the Tor binary used to issue requests. Example:
+  ```
+  PROXY_CMD = ["./src/app/tor"]
+  ```
+
+Make sure the modified Tor daemon is built and accessible at the specified path before running the script.
