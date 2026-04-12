@@ -29,6 +29,18 @@ To reproduce the experiment, the hidden service operator must first control four
      Use the fingerprint and nickname of the relay that will act as the entry guard.
 
 ## Step 2: Build the modified Tor daemon
+Before building, install the required build dependencies.
+
+### macOS
+```
+brew install automake autoconf libtool
+```
+
+### Linux (Debian/Ubuntu)
+```
+sudo apt update
+sudo apt install automake autoconf libtool pkg-config
+```
 
 Build the modified Tor daemon before running the experiment. This binary is used both by the hidden service and by a colocated Tor client running on the monitored relay.
 
@@ -133,13 +145,14 @@ REMOTE_SCRIPT="/exp/runner.sh"
 REMOTE_LOG="/exp/runner.log"
 
 Make sure that the SSH key on each of the first relays can authenticate to the next relay in the circuit, so that runner.sh can start the experiment remotely after convergence.
+
+```bash
 ### Step 5: Schedule experiment execution on the introduction point
 
 To automate the experiment, configure a cron job on the introduction point relay that periodically invokes `runner.sh`.
 
 ### 5.1 Edit the crontab
 
-```bash
 crontab -e
 ```
 
