@@ -183,6 +183,11 @@ Also verify that the paths are correct and logs are written to `/exp/runner.log`
 To reproduce the results presented in the paper, use the following scripts.
 
 ### Figures 2 and 3
+Before running the script, ensure that the required Python dependencies are installed:
+
+```
+pip3 install matplotlib requests
+```
 
 Run:
 
@@ -190,7 +195,7 @@ Run:
 python3 produce_graphs/generate_stats_and_graphs.py
 ```
 
-This script processes the collected experiment data and generates the statistics and plots used in Figures 2 and 3.
+This script processes data from Onionoo api and generates the statistics and plots used in Figures 2 and 3.
 
 ---
 
