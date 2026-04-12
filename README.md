@@ -133,8 +133,7 @@ REMOTE_SCRIPT="/exp/runner.sh"
 REMOTE_LOG="/exp/runner.log"
 
 Make sure that the SSH key on each of the first relays can authenticate to the next relay in the circuit, so that runner.sh can start the experiment remotely after convergence.
-
-## Step 5: Schedule experiment execution on the introduction point
+### Step 5: Schedule experiment execution on the introduction point
 
 To automate the experiment, configure a cron job on the introduction point relay that periodically invokes `runner.sh`.
 
