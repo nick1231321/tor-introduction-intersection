@@ -32,15 +32,15 @@ To reproduce the experiment, the hidden service operator must first control four
 Before building, install the required build dependencies.
 
 ### macOS
-```
-brew install automake autoconf libtool
+```bash
+brew install automake autoconf libtool pkg-config libevent openssl@3
 ```
 
 ### Linux (Debian/Ubuntu)
-```
+```bash
 sudo apt update
-sudo apt install automake autoconf libtool pkg-config
-```
+sudo apt install -y git build-essential automake libevent-dev libssl-dev zlib1g-dev
+
 
 Build the modified Tor daemon before running the experiment. This binary is used both by the hidden service and by a colocated Tor client running on the monitored relay.
 
@@ -55,6 +55,12 @@ The colocated client serves two purposes:
 make
 make install
 ```
+Optionaly if you don't want to build the manpages instead of running the second command run this:
+
+```bash
+./configure --disable-asciidoc  # do not build manpages
+```
+
 ## Step 3: Bring the hidden service online
 
 After building the modified Tor daemon, create a hidden service that will be used as the target of the experiment.
@@ -213,6 +219,7 @@ This script processes data from Onionoo api and generates the statistics and plo
 ---
 
 ### Table 1
+Before running the script, make sure that no other Tor process is currently running, as the script will launch its own Tor instance.
 
 Run:
 
