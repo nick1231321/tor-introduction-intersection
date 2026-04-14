@@ -453,15 +453,13 @@ class PacketPrinter:
             self.iteration += 1
             intersection_size = len(intersected_set)
 
-            self.csv_writer.writerow([self.iteration, intersection_size])
-            self.csv_file.flush()
-            os.fsync(self.csv_file.fileno())
 
             safe_send(conn, b"OK capturing=off\n")
-            print(f"[DEBUG] Current set size: {len(filtered_set)}")
-            print(f"[DEBUG] Intersected set size: {intersection_size}")
 
             if intersection_size == 1:
+                self.csv_writer.writerow([self.iteration, intersection_size])
+                self.csv_file.flush()
+                os.fsync(self.csv_file.fileno())
                 print("[INFO] Intersection reduced to 1. Exiting.")
                 try:
                     self.csv_file.close()
