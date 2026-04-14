@@ -58,14 +58,9 @@ The colocated client:
 ### Build
 ```bash
 ./autogen.sh
-./configure
+./configure --disable-asciidoc  # do not build manpages
 make
 make install
-```
-
-Optional (skip manpages):
-```bash
-./configure --disable-asciidoc  # do not build manpages
 ```
 
 ---
