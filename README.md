@@ -53,7 +53,7 @@ Build the modified Tor daemon before running the experiment. This binary is used
 
 The colocated client:
 1. Issues requests to trigger the introduction protocol.
-2. Sends control signals to the intersector plugin (`packet_logger_scripts/last_node/packet_processer.py`) to construct anonymity sets and compute intersections.
+2. Sends control signals to the intersector plugin (`packet_logger_scripts/packet_processer.py`) to construct anonymity sets and compute intersections.
 
 ### Build
 ```bash
