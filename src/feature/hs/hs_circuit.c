@@ -33,6 +33,7 @@
 #include "feature/nodelist/nodelist.h"
 #include "feature/stats/rephist.h"
 #include "lib/crypt_ops/crypto_dh.h"
+#include "lib/crypt_ops/crypto_format.h"
 #include "lib/crypt_ops/crypto_rand.h"
 #include "lib/crypt_ops/crypto_util.h"
 #include "lib/time/compat_time.h"
@@ -171,6 +172,25 @@ register_intro_circ(const hs_service_intro_point_t *ip,
 
   hs_circuitmap_register_intro_circ_v3_service_side(circ,
                                                     &ip->auth_key_kp.pubkey);
+}
+
+/** Claim the introduction point identity of ip (that is, its authentication
+ * key) for the given circuit in the service side circuitmap.
+ *
+ * This is the "break" half of the make-before-break introduction circuit
+ * rotation. Registering a circuit under a token that some other circuit
+ * already holds makes hs_circuitmap_register_impl() unregister that other
+ * circuit and mark it for close (see the "Kill old circuits with the same
+ * token" block in hs_circuitmap.c). Callers use that on purpose: the relay
+ * does the equivalent on its own side when it receives an ESTABLISH_INTRO
+ * cell carrying an auth key it already knows, which is what lets us rebuild
+ * the internal path to an introduction point without touching the
+ * descriptor. */
+void
+hs_circ_service_register_intro_circ(const hs_service_intro_point_t *ip,
+                                    origin_circuit_t *circ)
+{
+  register_intro_circ(ip, circ);
 }
 
 /** Return the number of opened introduction circuit for the given circuit that
@@ -1024,13 +1044,28 @@ hs_circ_retry_service_rendezvous_point(const origin_circuit_t *circ)
  * extend info ei. If the service is a single onion, and direct_conn is true,
  * a one-hop circuit will be requested.
  *
+ * If is_rotation is true, this circuit is a deliberate replacement for an
+ * introduction circuit that is currently established and serving. Two things
+ * then differ:
+ *
+ *   - The circuit is NOT registered in the service side circuitmap here.
+ *     Registering it at launch would make the duplicate-token logic in
+ *     hs_circuitmap_register_impl() close the live circuit immediately, which
+ *     is the opposite of make-before-break. The caller registers the circuit
+ *     from the INTRO_ESTABLISHED path instead, via
+ *     hs_circ_service_register_intro_circ().
+ *   - The launch is not counted against the service's intro circuit budget
+ *     for the current retry period, because a rotation is not a retry and
+ *     must not starve genuine relaunches.
+ *
  * Return 0 if the circuit was successfully launched and tagged
  * with the correct identifier. On error, a negative value is returned. */
 int
 hs_circ_launch_intro_point(hs_service_t *service,
                            const hs_service_intro_point_t *ip,
                            extend_info_t *ei,
-                           bool direct_conn)
+                           bool direct_conn,
+                           bool is_rotation)
 {
   /* Standard flags for introduction circuit. */
   int ret = -1, circ_flags = CIRCLAUNCH_NEED_UPTIME | CIRCLAUNCH_IS_INTERNAL;
@@ -1059,8 +1094,11 @@ hs_circ_launch_intro_point(hs_service_t *service,
 
   /* Note down the launch for the retry period. Even if the circuit fails to
    * be launched, we still want to respect the retry period to avoid stress on
-   * the circuit subsystem. */
-  service->state.num_intro_circ_launched++;
+   * the circuit subsystem. A rotation is not a retry, so it does not consume
+   * that budget. */
+  if (!is_rotation) {
+    service->state.num_intro_circ_launched++;
+  }
   circ = circuit_launch_by_extend_info(CIRCUIT_PURPOSE_S_ESTABLISH_INTRO,
                                        ei, circ_flags);
   if (circ == NULL) {
@@ -1070,8 +1108,31 @@ hs_circ_launch_intro_point(hs_service_t *service,
   /* Setup the circuit identifier and attach it to it. */
   circ->hs_ident = create_intro_circuit_identifier(service, ip);
   tor_assert(circ->hs_ident);
-  /* Register circuit in the global circuitmap. */
-  register_intro_circ(ip, circ);
+
+  if (is_rotation) {
+    char *path;
+
+    /* Make before break: leave this circuit out of the service circuitmap so
+     * the intro point keeps being served by the circuit that is already
+     * established. It is registered when its INTRO_ESTABLISHED arrives. The
+     * tag also tells hs_circ_service_intro_has_opened() not to treat this
+     * circuit as a spare one and repurpose it away. */
+    circ->hs_ident->is_intro_rotation = 1;
+
+    path = circuit_list_path(circ, 1);
+    log_notice(LD_REND,
+               "[intro-rotation] BUILDING replacement circuit %u for service "
+               "%s, auth key %s (deliberately unregistered until "
+               "INTRO_ESTABLISHED). Path: %s",
+               TO_CIRCUIT(circ)->n_circ_id,
+               safe_str_client(service->onion_address),
+               safe_str_client(ed25519_fmt(&ip->auth_key_kp.pubkey)),
+               safe_str_client(path));
+    tor_free(path);
+  } else {
+    /* Register circuit in the global circuitmap. */
+    register_intro_circ(ip, circ);
+  }
 
   /* Success. */
   ret = 0;
@@ -1102,7 +1163,11 @@ hs_circ_service_intro_has_opened(hs_service_t *service,
    * established introduction circuits */
   num_intro_circ = count_opened_desc_intro_point_circuits(service, desc);
   num_needed_circ = service->config.num_intro_points;
-  if (num_intro_circ > num_needed_circ) {
+  /* A rotation circuit is a replacement for an intro circuit that is already
+   * established and counted, not a spare one. Repurposing it would make the
+   * caller drop the intro point and hence change the descriptor, which is
+   * exactly what the rotation exists to avoid. */
+  if (num_intro_circ > num_needed_circ && !circ->hs_ident->is_intro_rotation) {
     /* There are too many opened valid intro circuit for what the service
      * needs so repurpose this one. */
 

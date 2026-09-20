@@ -79,6 +79,14 @@ typedef struct hs_ident_circuit_t {
    * rendezvous circuit. We track this because there is a check on a maximum
    * value. */
   uint64_t num_rdv_streams;
+
+  /** (Only service introduction circuit) True iff this circuit was launched
+   * by the introduction circuit rotation code as a replacement for an
+   * introduction circuit that is currently established and serving, using
+   * the same intro point and the same auth key. Such a circuit is
+   * deliberately kept out of the service circuitmap until its
+   * INTRO_ESTABLISHED arrives, and must never be repurposed away. */
+  unsigned int is_intro_rotation : 1;
 } hs_ident_circuit_t;
 
 /** Client and service side directory connection identifier used for a

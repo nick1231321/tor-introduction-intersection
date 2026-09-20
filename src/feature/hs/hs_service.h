@@ -40,6 +40,11 @@
 #define HS_SERVICE_POW_SEED_ROTATE_TIME_MIN (7200 - 900)
 #define HS_SERVICE_POW_SEED_ROTATE_TIME_MAX (7200)
 
+/** How long (in seconds) we give a replacement ("rotation") introduction
+ * circuit to answer with INTRO_ESTABLISHED before we give up on it and allow
+ * a new rotation attempt. The old circuit keeps serving the whole time. */
+#define HS_SERVICE_INTRO_ROTATION_TIMEOUT 120
+
 /** Collected metrics for a specific service. */
 typedef struct hs_service_metrics_t {
   /** Store containing the metrics values. */
@@ -96,6 +101,23 @@ typedef struct hs_service_intro_point_t {
   /** Support the INTRO2 DoS defense. If set, the DoS extension described by
    * proposal 305 is sent. */
   unsigned int support_intro2_dos_defense : 1;
+
+  /** Introduction circuit rotation (HiddenServiceIntroCircuitRotation).
+   *
+   * When we last received an INTRO_ESTABLISHED for the circuit that is
+   * currently registered for this intro point, that is, how old the internal
+   * path currently serving this intro point is. 0 if we never did. */
+  time_t circuit_established_ts;
+
+  /** Introduction circuit rotation: when we launched a replacement circuit
+   * for this intro point that has not established yet, or 0 if no rotation
+   * is in flight. Used both to avoid launching one replacement per second
+   * and to time out a replacement that never answers. */
+  time_t rotation_launched_ts;
+
+  /** Introduction circuit rotation: how many times the internal path of this
+   * intro point has been successfully replaced. Logging only. */
+  uint32_t num_rotations;
 } hs_service_intro_point_t;
 
 /** Object handling introduction points of a service. */
@@ -238,6 +260,13 @@ typedef struct hs_service_config_t {
   /** How many introduction points this service has. Specified by
    * HiddenServiceNumIntroductionPoints option. */
   unsigned int num_intro_points;
+
+  /** How often, in seconds, we rebuild the internal circuit leading to each
+   * of our introduction points while keeping the same introduction point and
+   * the same authentication key (and thus the same descriptor). 0 disables
+   * the behaviour and is the default. Specified by the
+   * HiddenServiceIntroCircuitRotation option. */
+  uint32_t intro_circuit_rotation_time;
 
   /** List of hs_service_authorized_client_t's of clients that may access this
    * service. Specified by HiddenServiceAuthorizeClient option. */

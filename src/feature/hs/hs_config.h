@@ -15,6 +15,14 @@
 #define HS_CONFIG_MAX_STREAMS_PER_RDV_CIRCUIT 65535
 /* Maximum number of intro points per version 3 services. */
 #define HS_CONFIG_V3_MAX_INTRO_POINTS 20
+
+/** Bounds for HiddenServiceIntroCircuitRotation, in seconds. A value of 0
+ * disables the feature and is the default. Anything else must sit between
+ * those two bounds. */
+#define HS_CONFIG_V3_INTRO_CIRC_ROTATION_DEFAULT 0
+#define HS_CONFIG_V3_INTRO_CIRC_ROTATION_MIN 30
+#define HS_CONFIG_V3_INTRO_CIRC_ROTATION_MAX (24 * 60 * 60)
+
 /* Default value for the introduction DoS defenses. The MIN/MAX are inclusive
  * meaning they can be used as valid values. */
 #define HS_CONFIG_V3_DOS_DEFENSE_DEFAULT 0

@@ -1,0 +1,10 @@
+  o Minor features (onion service, introduction circuits):
+    - Add a new per-service torrc option,
+      HiddenServiceIntroCircuitRotation, which periodically rebuilds the
+      internal circuit a service uses to reach each of its introduction
+      points while keeping the same introduction point relay and the same
+      introduction authentication key. The published descriptor is
+      unchanged; only the guard, vanguard and middle hops rotate. The
+      replacement circuit is built and established before the old one is
+      dropped (make before break), so introductions are never
+      interrupted. Disabled by default.

@@ -3613,6 +3613,21 @@ The next section describes the per service options that can only be set
     Number of introduction points the hidden service will have. You can't
     have more than 20. (Default: 3)
 
+[[HiddenServiceIntroCircuitRotation]] **HiddenServiceIntroCircuitRotation** __NUM__::
+    If non-zero, periodically rebuild the internal circuit the service uses
+    to reach each of its introduction points, every NUM seconds, while
+    keeping the same introduction point relay and the same introduction
+    authentication key. The published descriptor is therefore unchanged: only
+    the guard, vanguard and middle hops the service uses to reach the
+    introduction point are replaced. The replacement circuit is built first
+    and only takes over once the introduction point has answered
+    INTRO_ESTABLISHED on it, so introductions are never interrupted
+    (make-before-break). This shortens the lifetime of any single internal
+    introduction path, which limits what a long running intersection
+    observation of the service's introduction circuits can learn. Must be 0
+    (disabled) or between 30 and 86400. Has no effect on single onion
+    services, which reach their introduction points directly. (Default: 0)
+
 [[HiddenServicePort]] **HiddenServicePort** __VIRTPORT__ [__TARGET__]::
     Configure a virtual port VIRTPORT for a hidden service. You may use this
     option multiple times; each time applies to the service using the most

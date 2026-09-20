@@ -360,6 +360,23 @@ config_service_v3(const hs_opts_t *hs_opts,
   }
   config->num_intro_points = hs_opts->HiddenServiceNumIntroductionPoints;
 
+  /* Introduction circuit rotation interval, in seconds. 0 disables it. */
+  if (hs_opts->HiddenServiceIntroCircuitRotation != 0 &&
+      CHECK_OOB(hs_opts, HiddenServiceIntroCircuitRotation,
+                HS_CONFIG_V3_INTRO_CIRC_ROTATION_MIN,
+                HS_CONFIG_V3_INTRO_CIRC_ROTATION_MAX)) {
+    goto err;
+  }
+  config->intro_circuit_rotation_time =
+    hs_opts->HiddenServiceIntroCircuitRotation;
+  if (config->intro_circuit_rotation_time > 0) {
+    log_notice(LD_REND, "Service introduction circuit rotation enabled: "
+                        "the internal path to each introduction point will "
+                        "be rebuilt every %" PRIu32 " seconds, keeping the "
+                        "same introduction point and authentication key.",
+               config->intro_circuit_rotation_time);
+  }
+
   /* Circuit ID export setting. */
   if (hs_opts->HiddenServiceExportCircuitID) {
     int ok;

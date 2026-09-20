@@ -256,6 +256,7 @@ set_service_default_config(hs_service_config_t *c,
   c->max_streams_per_rdv_circuit = 0;
   c->max_streams_close_circuit = 0;
   c->num_intro_points = NUM_INTRO_POINTS_DEFAULT;
+  c->intro_circuit_rotation_time = HS_CONFIG_V3_INTRO_CIRC_ROTATION_DEFAULT;
   c->allow_unknown_ports = 0;
   c->is_single_onion = 0;
   c->dir_group_readable = 0;
@@ -2894,9 +2895,159 @@ rotate_all_descriptors(time_t now)
   } FOR_EACH_SERVICE_END;
 }
 
+/** Launch a replacement introduction circuit for the given established intro
+ * point, keeping the SAME introduction point relay and the SAME authentication
+ * key, and therefore the same descriptor.
+ *
+ * This is the "make" half of make-before-break: the circuit is launched
+ * without being registered in the service side circuitmap, so old_circ keeps
+ * receiving INTRODUCE2 cells until the replacement answers
+ * INTRO_ESTABLISHED. See service_handle_intro_established() for the swap.
+ *
+ * Return 0 if a replacement circuit was launched, -1 otherwise. On failure
+ * the intro point is left exactly as it was and we simply try again later. */
+static int
+launch_intro_circuit_rotation(hs_service_t *service,
+                              hs_service_intro_point_t *ip,
+                              origin_circuit_t *old_circ,
+                              time_t now)
+{
+  int ret = -1;
+  extend_info_t *ei;
+
+  tor_assert(service);
+  tor_assert(ip);
+  tor_assert(old_circ);
+
+  /* Same intro point node as the one we are already using: this is a path
+   * rebuild, not an intro point rotation. Never a direct (one hop)
+   * connection: the whole point is to replace the internal path. */
+  ei = get_extend_info_from_intro_point(ip, 0);
+  if (ei == NULL) {
+    log_notice(LD_REND,
+               "[intro-rotation] Service %s: cannot rebuild the introduction "
+               "circuit of intro point %s right now (no usable extend info). "
+               "Keeping the current circuit; will try again.",
+               safe_str_client(service->onion_address),
+               safe_str_client(describe_intro_point(ip)));
+    goto end;
+  }
+
+  log_notice(LD_REND,
+             "[intro-rotation] START service %s intro point %s auth key %s: "
+             "circuit %u has been established for %ld seconds "
+             "(HiddenServiceIntroCircuitRotation %" PRIu32 "). Building a "
+             "replacement internal path to the SAME intro point. This is "
+             "rotation #%" PRIu32 " for this intro point.",
+             safe_str_client(service->onion_address),
+             safe_str_client(describe_intro_point(ip)),
+             safe_str_client(ed25519_fmt(&ip->auth_key_kp.pubkey)),
+             TO_CIRCUIT(old_circ)->n_circ_id,
+             (long) (now - ip->circuit_established_ts),
+             service->config.intro_circuit_rotation_time,
+             ip->num_rotations + 1);
+
+  /* Note that we deliberately do NOT touch ip->circuit_retries here. That
+   * counter exists to retire an intro point whose circuits keep failing; a
+   * rotation is not a failure and must not count towards
+   * MAX_INTRO_POINT_CIRCUIT_RETRIES, or should_remove_intro_point() would
+   * drop the intro point after three rotations and change the descriptor. */
+  if (hs_circ_launch_intro_point(service, ip, ei, false, true) < 0) {
+    log_notice(LD_REND,
+               "[intro-rotation] Service %s: failed to launch the replacement "
+               "introduction circuit for intro point %s. The current circuit "
+               "keeps serving; will try again.",
+               safe_str_client(service->onion_address),
+               safe_str_client(describe_intro_point(ip)));
+    goto end;
+  }
+
+  /* A rotation is now in flight for this intro point. Cleared when the
+   * replacement establishes, or after HS_SERVICE_INTRO_ROTATION_TIMEOUT. */
+  ip->rotation_launched_ts = now;
+  ret = 0;
+
+ end:
+  extend_info_free(ei);
+  return ret;
+}
+
+/** For the given service, consider rebuilding the internal circuit of every
+ * established introduction point that has been up for longer than
+ * HiddenServiceIntroCircuitRotation seconds.
+ *
+ * This implements the "short lived introduction circuits" mitigation: the
+ * introduction point, its authentication key and hence the published
+ * descriptor never change, only the guard/middle/vanguard hops the service
+ * uses to reach it, which is what an intersection attack observes. */
+static void
+run_intro_circuit_rotation(hs_service_t *service, time_t now)
+{
+  uint32_t rotation_time;
+
+  tor_assert(service);
+
+  rotation_time = service->config.intro_circuit_rotation_time;
+  if (rotation_time == 0) {
+    /* Disabled, and that is the default. */
+    return;
+  }
+  if (service->config.is_single_onion) {
+    /* A single onion service reaches its intro points directly: there is no
+     * internal path to rebuild. */
+    return;
+  }
+
+  FOR_EACH_DESCRIPTOR_BEGIN(service, desc) {
+    DIGEST256MAP_FOREACH_MODIFY(desc->intro_points.map, key,
+                                hs_service_intro_point_t *, ip) {
+      origin_circuit_t *circ = hs_circ_service_get_established_intro_circ(ip);
+
+      /* Only rotate an intro point that is currently up and serving. */
+      if (circ == NULL || TO_CIRCUIT(circ)->marked_for_close) {
+        continue;
+      }
+      if (ip->circuit_established_ts == 0) {
+        /* Established before this code ran (or we somehow missed the
+         * INTRO_ESTABLISHED); start the clock now. */
+        ip->circuit_established_ts = now;
+        continue;
+      }
+
+      /* Is a replacement already being built? Only one at a time. */
+      if (ip->rotation_launched_ts != 0) {
+        if (now - ip->rotation_launched_ts <
+            HS_SERVICE_INTRO_ROTATION_TIMEOUT) {
+          continue;
+        }
+        log_notice(LD_REND,
+                   "[intro-rotation] Service %s: the replacement introduction "
+                   "circuit for intro point %s did not establish within %d "
+                   "seconds. Circuit %u keeps serving; trying again.",
+                   safe_str_client(service->onion_address),
+                   safe_str_client(describe_intro_point(ip)),
+                   HS_SERVICE_INTRO_ROTATION_TIMEOUT,
+                   TO_CIRCUIT(circ)->n_circ_id);
+        ip->rotation_launched_ts = 0;
+      }
+
+      if ((now - ip->circuit_established_ts) < (time_t) rotation_time) {
+        continue;
+      }
+
+      launch_intro_circuit_rotation(service, ip, circ, now);
+    } DIGEST256MAP_FOREACH_END;
+  } FOR_EACH_DESCRIPTOR_END;
+}
+
 /** Scheduled event run from the main loop. Make sure all our services are up
  * to date and ready for the other scheduled events. This includes looking at
- * the introduction points status and descriptor rotation time. */
+ * the introduction points status and descriptor rotation time.
+ *
+ * It also drives introduction circuit rotation, which is the one thing here
+ * that can open a circuit. It is safe: the replacement circuit is launched
+ * after the intro point maps have been cleaned up, and launching it neither
+ * adds nor removes an intro point. */
 STATIC void
 run_housekeeping_event(time_t now)
 {
@@ -2927,6 +3078,12 @@ run_housekeeping_event(time_t now)
     /* Remove expired failing intro point from the descriptor failed list. We
      * reset them at each INTRO_CIRC_RETRY_PERIOD. */
     remove_expired_failing_intro(service, now);
+
+    /* If HiddenServiceIntroCircuitRotation is set, rebuild the internal path
+     * of any introduction point that has been using the same one for too
+     * long. Done after the cleanup above so the intro point maps are in a
+     * settled state. */
+    run_intro_circuit_rotation(service, now);
 
     /* At this point, the service is now ready to go through the scheduled
      * events guaranteeing a valid state. Intro points might be missing from
@@ -3003,7 +3160,8 @@ launch_intro_point_circuits(hs_service_t *service)
 
       /* Launch a circuit to the intro point. */
       ip->circuit_retries++;
-      if (hs_circ_launch_intro_point(service, ip, ei, direct_conn) < 0) {
+      if (hs_circ_launch_intro_point(service, ip, ei, direct_conn,
+                                     false) < 0) {
         log_info(LD_REND, "Unable to launch intro circuit to node %s "
                           "for service %s.",
                  safe_str_client(extend_info_describe(ei)),
@@ -3737,6 +3895,89 @@ service_handle_intro_established(origin_circuit_t *circ,
   if (hs_circ_handle_intro_established(service, ip, circ, payload,
                                        payload_len) < 0) {
     goto err;
+  }
+
+  /* --- Introduction circuit rotation: the make-before-break commit point. ---
+   *
+   * A circuit launched the normal way by launch_intro_point_circuits() was
+   * registered in the service side circuitmap at launch time, so the lookup
+   * below returns this very circuit and there is nothing to swap.
+   *
+   * A replacement circuit launched by launch_intro_circuit_rotation() was
+   * deliberately left unregistered, because registering it at launch would
+   * have made hs_circuitmap_register_impl() close the live circuit holding
+   * the same auth key token. Now that the introduction point has answered
+   * INTRO_ESTABLISHED on the new circuit, we claim the intro point identity
+   * for it. That same duplicate-token logic then drops and closes the old
+   * circuit. The auth key, and therefore the descriptor, never changes. */
+  {
+    origin_circuit_t *old_circ = hs_circ_service_get_intro_circ(ip);
+
+    if (circ->hs_ident->is_intro_rotation || old_circ != circ) {
+      char *path = circuit_list_path(circ, 1);
+      uint32_t old_circ_id =
+        (old_circ != NULL) ? TO_CIRCUIT(old_circ)->n_circ_id : 0;
+
+      log_notice(LD_REND,
+                 "[intro-rotation] ESTABLISHED service %s intro point %s "
+                 "auth key %s on replacement circuit %u. Path: %s",
+                 safe_str_client(service->onion_address),
+                 safe_str_client(describe_intro_point(ip)),
+                 safe_str_client(ed25519_fmt(&ip->auth_key_kp.pubkey)),
+                 TO_CIRCUIT(circ)->n_circ_id,
+                 safe_str_client(path));
+      tor_free(path);
+
+      /* The swap. This closes old_circ if it is still around. */
+      hs_circ_service_register_intro_circ(ip, circ);
+
+      if (old_circ != NULL) {
+        log_notice(LD_REND,
+                   "[intro-rotation] SWAPPED service %s: circuit %u now "
+                   "serves intro point %s; old circuit %u is %s. Auth key is "
+                   "still %s, so the descriptor is unchanged.",
+                   safe_str_client(service->onion_address),
+                   TO_CIRCUIT(circ)->n_circ_id,
+                   safe_str_client(describe_intro_point(ip)),
+                   old_circ_id,
+                   TO_CIRCUIT(old_circ)->marked_for_close ?
+                     "closed" : "NOT closed (unexpected)",
+                   safe_str_client(ed25519_fmt(&ip->auth_key_kp.pubkey)));
+      } else {
+        log_notice(LD_REND,
+                   "[intro-rotation] SWAPPED service %s: circuit %u now "
+                   "serves intro point %s; the previous circuit was already "
+                   "gone. Auth key is still %s.",
+                   safe_str_client(service->onion_address),
+                   TO_CIRCUIT(circ)->n_circ_id,
+                   safe_str_client(describe_intro_point(ip)),
+                   safe_str_client(ed25519_fmt(&ip->auth_key_kp.pubkey)));
+      }
+      ip->num_rotations++;
+      /* From now on this is an ordinary, registered introduction circuit. */
+      circ->hs_ident->is_intro_rotation = 0;
+    }
+  }
+
+  /* Remember how old the internal path serving this intro point is, so
+   * run_intro_circuit_rotation() can decide when to rebuild it. */
+  ip->circuit_established_ts = approx_time();
+  ip->rotation_launched_ts = 0;
+
+  if (service->config.intro_circuit_rotation_time > 0) {
+    /* Belt and braces against the retry accounting retiring this intro point:
+     * a successful establishment clears the failure history. We reset to 1
+     * rather than 0 because hs_circ_launch_intro_point() expects a non zero
+     * retry count (it is incremented before every non rotation launch). */
+    if (ip->circuit_retries != 1) {
+      log_info(LD_REND, "[intro-rotation] Service %s: resetting the "
+                        "circuit_retries of intro point %s from %" PRIu32
+                        " to 1 after a successful establishment.",
+               safe_str_client(service->onion_address),
+               safe_str_client(describe_intro_point(ip)),
+               ip->circuit_retries);
+    }
+    ip->circuit_retries = 1;
   }
 
   struct timeval now;

@@ -516,6 +516,7 @@ static const config_var_t option_vars_[] = {
   VAR("HiddenServiceMaxStreams",LINELIST_S, RendConfigLines, NULL),
   VAR("HiddenServiceMaxStreamsCloseCircuit",LINELIST_S, RendConfigLines, NULL),
   VAR("HiddenServiceNumIntroductionPoints", LINELIST_S, RendConfigLines, NULL),
+  VAR("HiddenServiceIntroCircuitRotation", LINELIST_S, RendConfigLines, NULL),
   VAR("HiddenServiceExportCircuitID", LINELIST_S,  RendConfigLines, NULL),
   VAR("HiddenServiceEnableIntroDoSDefense", LINELIST_S, RendConfigLines, NULL),
   VAR("HiddenServiceEnableIntroDoSRatePerSec",
