@@ -1,0 +1,30 @@
+Sep 20 20:12:02.600 [notice] Tor 0.4.9.3-alpha-dev (git-33abc432ffff17a2) opening new log file.
+Sep 20 20:12:02.596 [notice] We compiled with OpenSSL 30600030: OpenSSL 3.6.3 9 Jun 2026 and we are running with OpenSSL 30600030: 3.6.3. These two versions should be binary compatible.
+Sep 20 20:12:02.598 [notice] Tor 0.4.9.3-alpha-dev (git-33abc432ffff17a2) running on Darwin with Libevent 2.1.12-stable, OpenSSL 3.6.3, Zlib 1.2.12, Liblzma 5.8.3, Libzstd 1.5.7 and Unknown N/A as libc.
+Sep 20 20:12:02.598 [notice] Tor can't help you if you use it wrong! Learn how to be safe at https://support.torproject.org/faq/staying-anonymous/
+Sep 20 20:12:02.598 [notice] This version is not a stable Tor release. Expect more bugs than usual.
+Sep 20 20:12:02.598 [notice] Read configuration file "/Users/nicolasconstantinides/Downloads/chutney/net/nodes.1789922797/010h/torrc".
+Sep 20 20:12:02.599 [warn] You have used DirAuthority or AlternateDirAuthority to specify alternate directory authorities in your configuration. This is potentially dangerous: it can make you look different from all other Tor users, and hurt your anonymity. Even if you've specified the same authorities as Tor uses by default, the defaults could change in the future. Be sure you know what you're doing.
+Sep 20 20:12:02.599 [warn] TestingTorNetwork is set. This will make your node almost unusable in the public Tor network, and is therefore only advised if you are building a testing Tor network!
+Sep 20 20:12:02.599 [notice] Opening Control listener on 127.0.0.1:8010
+Sep 20 20:12:02.599 [notice] Opened Control listener connection (ready) on 127.0.0.1:8010
+Sep 20 20:12:02.599 [notice] Opening Control listener on [::1]:8010
+Sep 20 20:12:02.600 [notice] Opened Control listener connection (ready) on [::1]:8010
+Sep 20 20:12:02.600 [notice] Opening Control listener on /Users/nicolasconstantinides/Downloads/chutney/net/nodes.1789922797/010h/control
+Sep 20 20:12:02.600 [notice] Opened Control listener connection (ready) on /Users/nicolasconstantinides/Downloads/chutney/net/nodes.1789922797/010h/control
+Sep 20 20:12:02.600 [warn] Your log may contain sensitive information - you disabled SafeLogging, and you're logging more than "notice". Don't log unless it serves an important reason. Overwrite the log afterwards.
+Sep 20 20:12:02.600 [notice] Not disabling debugger attaching for unprivileged users.
+Sep 20 20:12:02.612 [notice] Set list of supported TLS groups to: ?*X25519MLKEM768 / ?SecP256r1MLKEM768:?X25519 / *P-256:P-224
+Sep 20 20:12:02.612 [notice] Bootstrapped 0% (starting): Starting
+Sep 20 20:12:02.613 [notice] Starting with guard context "default"
+Sep 20 20:12:03.616 [notice] Bootstrapped 5% (conn): Connecting to a relay
+Sep 20 20:12:03.616 [notice] All current guards excluded by path restriction type 2; using an additional guard.
+Sep 20 20:12:03.619 [notice] Bootstrapped 10% (conn_done): Connected to a relay
+Sep 20 20:12:03.624 [notice] Bootstrapped 14% (handshake): Handshaking with a relay
+Sep 20 20:12:03.626 [notice] Bootstrapped 15% (handshake_done): Handshake with a relay done
+Sep 20 20:12:03.626 [notice] Bootstrapped 75% (enough_dirinfo): Loaded enough directory info to build circuits
+Sep 20 20:12:03.626 [notice] Bootstrapped 90% (ap_handshake_done): Handshake finished with a relay to build circuits
+Sep 20 20:12:03.626 [notice] Bootstrapped 95% (circuit_create): Establishing a Tor circuit
+Sep 20 20:12:03.636 [notice] Bootstrapped 100% (done): Done
+Sep 20 20:13:23.473 [notice] New control connection opened from 127.0.0.1.
+Sep 20 20:13:32.916 [notice] New control connection opened from 127.0.0.1.

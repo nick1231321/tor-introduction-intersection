@@ -1,0 +1,114 @@
+EVIDENCE 3 - CONTINUITY ACROSS A ROTATION
+==========================================
+
+Method: a client-side curl loop through the client's SOCKS port, one request every 2
+seconds, running from 19:59:00 to 20:01:48. The 20:00:13 / 20:00:17 rotation cycle
+(all 6 introduction points rebuilt) falls in the middle of that window.
+Command run per probe (script: 03-continuity-curl.log header):
+  curl -s -m 25 --socks5-hostname 127.0.0.1:9009 \
+       http://xk335k6vqeexv3qpnn3jlvlbee4vcgp3lccmiusq5qem3wpxmr6cu7yd.onion:5858/
+
+RESULT
+------
+  probes issued            : 75
+  succeeded (exit 0 AND correct body) : 74
+  failed                   : 1
+
+INTRODUCTIONS LOST AT THE MOMENT OF A SWAP: 0
+---------------------------------------------
+The single failure was probe 3, which started at 19:59:04 and gave up at 19:59:18:
+probe=3 start=19:59:04.276044000 end=19:59:18 exit=97 body=[]
+  curl exit 97 = CURLE_PROXY (the SOCKS handshake to the client's onion connection failed).
+
+That failure is 69 seconds BEFORE the 20:00:13 rotation and 47 seconds AFTER the
+19:58:17 cycle, i.e. it is not at a swap. Rotation events in the probe window:
+  1 x START at 20:00:13.777
+  2 x BUILDING at 20:00:13.778
+  2 x START at 20:00:13.778
+  1 x BUILDING at 20:00:13.779
+  1 x ESTABLISHED at 20:00:13.798
+  1 x SWAPPED at 20:00:13.798
+  1 x ESTABLISHED at 20:00:13.801
+  1 x SWAPPED at 20:00:13.801
+  1 x ESTABLISHED at 20:00:13.802
+  1 x SWAPPED at 20:00:13.802
+  1 x START at 20:00:17.783
+  2 x BUILDING at 20:00:17.784
+  2 x START at 20:00:17.784
+  1 x BUILDING at 20:00:17.785
+  1 x ESTABLISHED at 20:00:17.804
+  1 x SWAPPED at 20:00:17.804
+  1 x ESTABLISHED at 20:00:17.805
+  1 x SWAPPED at 20:00:17.805
+  1 x ESTABLISHED at 20:00:17.806
+  1 x SWAPPED at 20:00:17.806
+
+The 14 probes that bracket the 20:00:13 swap, every one a success:
+  probe=24 start=20:00:01.738984000 end=20:00:01 exit=0 body=[intro-rotation test network: hello from the onion service]
+  probe=25 start=20:00:03.791990000 end=20:00:03 exit=0 body=[intro-rotation test network: hello from the onion service]
+  probe=26 start=20:00:05.842324000 end=20:00:05 exit=0 body=[intro-rotation test network: hello from the onion service]
+  probe=27 start=20:00:07.891224000 end=20:00:07 exit=0 body=[intro-rotation test network: hello from the onion service]
+  probe=28 start=20:00:09.960125000 end=20:00:09 exit=0 body=[intro-rotation test network: hello from the onion service]
+  probe=29 start=20:00:12.006518000 end=20:00:12 exit=0 body=[intro-rotation test network: hello from the onion service]
+  probe=30 start=20:00:14.051503000 end=20:00:14 exit=0 body=[intro-rotation test network: hello from the onion service]
+  probe=31 start=20:00:16.102113000 end=20:00:16 exit=0 body=[intro-rotation test network: hello from the onion service]
+  probe=32 start=20:00:18.152140000 end=20:00:18 exit=0 body=[intro-rotation test network: hello from the onion service]
+  probe=33 start=20:00:20.219109000 end=20:00:20 exit=0 body=[intro-rotation test network: hello from the onion service]
+  probe=34 start=20:00:22.268026000 end=20:00:22 exit=0 body=[intro-rotation test network: hello from the onion service]
+  probe=35 start=20:00:24.315529000 end=20:00:24 exit=0 body=[intro-rotation test network: hello from the onion service]
+  probe=36 start=20:00:26.356468000 end=20:00:26 exit=0 body=[intro-rotation test network: hello from the onion service]
+  probe=37 start=20:00:28.405848000 end=20:00:28 exit=0 body=[intro-rotation test network: hello from the onion service]
+
+Why no introduction is lost: make-before-break. The replacement circuit is built and
+ESTABLISH_INTRO is answered with INTRO_ESTABLISHED on it BEFORE the old circuit goes
+away, and the old circuit is torn down by the intro relay itself (duplicate-token kill),
+not by the service. At every instant at least one circuit is serving the intro point.
+
+3b. ONE ROTATION DID NOT COMPLETE - AND STILL COST NOTHING (observed, 20:02:17)
+-------------------------------------------------------------------------------
+Of the rotation attempts so far, one replacement circuit failed to establish:
+  [intro-rotation] START service xk335k6vqeexv3qpnn3jlvlbee4vcgp3lccmiusq5qem3wpxmr6cu7yd intro point $C
+  [intro-rotation] BUILDING replacement circuit 3402910420 for service xk335k6vqeexv3qpnn3jlvlbee4vcgp3lccm
+  -> no ESTABLISHED and no SWAPPED line followed for that auth key in that cycle.
+  info.log shows the replacement circuit being closed 22 ms after launch:
+  7936:Sep 20 20:02:17.040 [info] circuit_mark_for_close_: Circuit 3402910420 (id: 143) marked for close at src/core/or/circuitbuild.c:1112 (orig reason: 9, new reason: 0)
+
+Cycle tallies confirm 6 attempted, 5 completed in that one cycle:
+  19:58  START=6  SWAPPED=6
+  20:00  START=6  SWAPPED=6
+  20:02  START=6  SWAPPED=5
+  20:04  START=6  SWAPPED=6
+  20:06  START=6  SWAPPED=6
+
+Consequences, as observed:
+  - the OLD circuit kept serving that introduction point (make-before-break: the service
+    never closed it, and no replacement claimed the token, so nothing was lost);
+  - the client kept reaching the service throughout;
+  - the next cycle at 20:04:17 rotated that same auth key successfully (6/6 that cycle),
+    so the condition was transient and self-healing;
+  - the intro point was NOT retired despite the failed attempt.
+
+WHY IT FAILED - traced and verified in this tree, not guessed
+------------------------------------------------------------
+The replacement circuit exceeded tor's adaptive circuit-build timeout while it was still
+building, and tor then kept it alive purely to measure how long it would have taken:
+
+  src/core/or/circuitstats.c:636  circuit_build_times_mark_circ_as_measurement_only()
+      "Mark this circuit as timed out, but change its purpose so that it continues to
+       build, allowing us to measure its full build time."
+      -> emits CIRC_EVENT_FAILED with END_CIRC_REASON_TIMEOUT
+      -> circuit_change_purpose(circ, CIRCUIT_PURPOSE_C_MEASURE_TIMEOUT)
+
+  src/core/or/circuitbuild.c:1111-1112  circuit_build_no_more_hops()
+      /* We're done with measurement circuits here. Just close them */
+      if (circ->base_.purpose == CIRCUIT_PURPOSE_C_MEASURE_TIMEOUT)
+        circuit_mark_for_close(TO_CIRCUIT(circ), END_CIRC_REASON_FINISHED);   /* = 9 */
+
+That is exactly the pair of records observed: the control port logged the circuit as
+FAILED with REASON=TIMEOUT while still in HS_STATE=HSSI_CONNECTING with only 3 of its 4
+hops done, and info.log then shows it closed at circuitbuild.c:1112 with reason 9. Four
+such timeouts occurred in the 360 s cost window (see 04-cost.txt); the raw control-port
+events are in 04-cost-rotation-ON.txt.
+
+So this is ordinary circuit-build timeout on a loaded local network, not a defect in the
+rotation logic - and because of make-before-break it costs nothing but a skipped cycle.

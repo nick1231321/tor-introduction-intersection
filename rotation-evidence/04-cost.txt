@@ -1,0 +1,101 @@
+EVIDENCE 4 - COST: INTRODUCTION CIRCUITS BUILT, ROTATION ON vs OFF
+==================================================================
+
+Method, identical in both runs: subscribe to the service's control port with SETEVENTS
+CIRC and count every CIRC event whose PURPOSE is HS_SERVICE_INTRO for exactly 360
+seconds. Script: circcount.py (its source is quoted at the bottom of this file).
+Both windows begin well after the service has settled, so neither includes the burst of
+introduction circuits a service builds at startup. The service has 6 introduction points
+live at any time (3 for the descriptor clients are using, 3 for its successor).
+
+RUN A - rotation ON   (HiddenServiceIntroCircuitRotation 120)
+  window: 20:05:39 to 20:11:45
+    LAUNCHED   18
+    EXTENDED   68
+    BUILT      14
+    CLOSED     14
+    FAILED     4
+
+RUN B - rotation OFF  (HiddenServiceIntroCircuitRotation 0, the default)
+  window: 20:13:32 to 20:19:58
+    LAUNCHED   0
+    EXTENDED   0
+    BUILT      0
+    CLOSED     0
+    FAILED     0
+
+RESULT
+------
+  introduction circuits launched in 360 s, rotation ON : 18
+  introduction circuits launched in 360 s, rotation OFF: 0
+
+  With the option off, an introduction circuit is built once and then simply stays up:
+  zero churn over the whole window. With the option on at 120 s, the service rebuilds
+  all 6 introduction paths every 120 s, so a 360 s window contains exactly 3 cycles:
+    3 cycles x 6 introduction points = 18 launches   (observed: 18)
+
+  The steady-state cost is therefore: one extra four-hop circuit per introduction point
+  per rotation period, and nothing else. At 6 intro points and a 120 s period that is
+  180 circuits per hour, against 0 per hour with the option off. Shortening the period
+  scales this linearly; the option exists so the trade can be set per service.
+
+  Costs that did NOT appear:
+    * no descriptor re-upload caused by a rotation (evidence 2)
+    * no introduction lost, so no extra client-side retries (evidence 3)
+    * no additional introduction POINTS - the count stays at 6; these are rebuilt
+      paths to the same relays, not new relays
+
+  Build outcomes within the ON window: 14 built, 4 failed, 14 closed.
+  The 4 failures are replacement circuits that exceeded tor's adaptive circuit-build
+  timeout while building (control-port REASON=TIMEOUT, HS_STATE=HSSI_CONNECTING, and the
+  event shows only 3 of 4 hops completed). They cost nothing: make-before-break means the
+  old circuit was still serving, and the next cycle retried. See section 3b.
+  The 14 closes are the old circuits, all destroyed by the intro relay (evidence 5).
+
+HOW RUN B WAS PRODUCED
+----------------------
+  Only the onion service node was restarted; the other 10 nodes and the client kept
+  running, and the onion address is unchanged because the service keys stay on disk.
+    1. cp net/nodes/010h/torrc <backup>
+    2. kill $(cat net/nodes/010h/pid)
+    3. sed -i '' 's/^HiddenServiceIntroCircuitRotation 120$/HiddenServiceIntroCircuitRotation 0/' net/nodes/010h/torrc
+    4. mv notice.log notice.log.rotation-ON ; mv info.log info.log.rotation-ON
+    5. tor -f net/nodes/010h/torrc   (the same binary, relaunched by hand)
+    6. waited for 6 introduction circuits to be established, confirmed the onion was
+       reachable, confirmed 0 lines matching 'intro-rotation' in the new notice.log
+    7. ran the 360 s counter
+
+  Checks recorded at the time of run B:
+    lines matching 'intro-rotation' in the rotation-off notice.log: 0
+    introduction circuits live during run B                      : 6
+    curl through the client's SOCKS port during run B            : success (exit 0)
+
+COUNTING SCRIPT
+---------------
+  """Count HS_SERVICE_INTRO circuit events on the service's control port for N seconds."""
+  import socket, sys, binascii, time, collections
+  node, secs, label = sys.argv[1], int(sys.argv[2]), sys.argv[3]
+  base="/Users/nicolasconstantinides/Downloads/chutney/net/nodes/"+node
+  port={"010h":8010,"009c":8009}[node]
+  cookie=binascii.hexlify(open(base+"/control_auth_cookie","rb").read()).decode()
+  s=socket.create_connection(("127.0.0.1",port),15); s.settimeout(secs+30)
+  f=s.makefile("rwb")
+  def send(l): f.write((l+"\r\n").encode()); f.flush()
+  send("AUTHENTICATE "+cookie); f.readline()
+  send("SETEVENTS CIRC"); f.readline()
+  t0=time.time(); ev=collections.Counter(); raw=[]
+  while time.time()-t0 < secs:
+      try: line=f.readline().decode("utf-8","replace").rstrip("\r\n")
+      except socket.timeout: break
+      if not line: break
+      if line.startswith("650 CIRC ") and "PURPOSE=HS_SERVICE_INTRO" in line:
+          parts=line.split()
+          ev[parts[3]] += 1                      # LAUNCHED / EXTENDED / BUILT / CLOSED / FAILED
+          raw.append(time.strftime("%H:%M:%S ")+line)
+  print("# label=%s node=%s window=%ds" % (label,node,secs))
+  print("# counted CIRC events with PURPOSE=HS_SERVICE_INTRO from the service's control port")
+  print("# started %s  ended %s" % (time.strftime("%H:%M:%S",time.localtime(t0)), time.strftime("%H:%M:%S")))
+  for k in ("LAUNCHED","EXTENDED","BUILT","CLOSED","FAILED"):
+      print("%-10s %d" % (k, ev[k]))
+  print("\n# raw events")
+  for r in raw: print(r)

@@ -1,0 +1,19 @@
+# CONTROL TEST: two GETINFO hs/service/desc dumps 3 seconds apart, NO rotation in between.
+# Purpose: show the service-side dump re-encrypts on every GETINFO, so ciphertext differences
+# between two dumps are an encoding artifact, not a descriptor change.
+# dump A at 20:03:08
+# dump B at 20:03:11
+
+## plaintext fields (must be identical):
+dump A: hs-descriptor 3 descriptor-lifetime 180 revision-counter 525999 
+dump B: hs-descriptor 3 descriptor-lifetime 180 revision-counter 525999 
+
+## signing key cert identical?
+YES - identical
+
+## superencrypted ciphertext identical?
+NO - differs even with NO rotation between the two dumps
+
+## signature line:
+A: signature x818X3qZco/er4YNBFc2X/O3wslwK3Hv1DB2Cdoi+TRlNGEnFTbcz2vXnEDCpISiwF+U6kAmSIVUByJMBtL+Dg
+B: signature Y8n88QIZWCNE0ttsH1OhoalbuMTMWKSZMlvEKDR6gAuNgJOgJdEJkQDHUx4jUjAkn99n+z8sFkZ6YRXUUu5vBg

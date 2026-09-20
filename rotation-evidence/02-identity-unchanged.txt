@@ -1,0 +1,99 @@
+EVIDENCE 2 - THE IDENTITY DOES NOT CHANGE
+=========================================
+
+2a. THE AUTH KEY IS UNCHANGED ACROSS EVERY ROTATION
+---------------------------------------------------
+The auth key is what a relay uses to key an introduction point and what the descriptor
+publishes. If rotation changed it, the descriptor would have to change too.
+Each rotation prints the auth key three times: at START, at ESTABLISHED, and at SWAPPED.
+Command:
+  grep "\[intro-rotation\]" notice.log | grep -oE "auth key [A-Za-z0-9+/]+" | sort | uniq -c
+
+  14 auth key 6IItQILN9s8dzxAgS69GUpcj9701mrCKRZ20JZOo4Ik
+  15 auth key 9Azr1SsYirPPxqvxFcCGilbT5jgyqUaeljTFhYhTYX8
+  24 auth key F17nb8L/1DblJJPHXar2eDn2PSr3+zxR0pvCCYAVsxs
+  12 auth key FNf38cFr9hcUc5ZNlCi6MQTH4p//uljOB+Pb8Nel1H4
+  24 auth key GnHWn0QIpEYFmG6R2vVIJInDDKfCtCvPqUHSjgcHIAg
+  15 auth key KTTAGiXyr3QzflVDuLuD/uHlIjNreUoKvbREgdRhhTY
+  12 auth key LOHinfpXSknqyLq6vTZiXKAK2VESnzRtK3/zZvdLLu8
+  12 auth key Lpef7nDxPOYqqmmVB7mpilBK8lvJwG5BNMQv29LHW4Y
+   3 auth key a1cDtMLfC9ViHk5hnT5UlMrHVRnTs/wmv7qknZfkhV4
+  24 auth key ePWIi5RHXqlTgS4ZTlUhjD+tAbgQq7ncGB65jrJpxpg
+   3 auth key lWvR2oWGn/bGVKN9HH6ZJYVgpkQGffKKLUHtWMM1gfg
+   3 auth key qbkoi6/Os1zSt5RKAZRn2YRJo6krDOAF9BPWwyO64R4
+
+Three of these keys belong to the descriptor clients are currently using and three to its
+successor; the rest are earlier successors that tor retired on its own schedule (see 2b).
+The counts are per-key line totals; a key that rotated N times appears in about 3N lines.
+What matters is that no rotation ever changed a key: every START/ESTABLISHED/SWAPPED trio
+for one rotation carries the same key, and a key's intro point is fixed for the key's life.
+
+2b. WHY THE NUMBER OF AUTH KEYS GROWS - NOT CAUSED BY ROTATION
+-------------------------------------------------------------
+Per auth key: when it first rotated, when it last rotated, how deep it got,
+and the introduction point it kept the whole time.
+
+auth key                                     first rot     last rot      depth  intro point (hop 4), constant
+Lpef7nDxPOYqqmmVB7mpilBK8lvJwG5BNMQv29LHW4Y  19:50:13.604  19:56:13.310      4  $D7F2E6732DAEA3AF...
+FNf38cFr9hcUc5ZNlCi6MQTH4p//uljOB+Pb8Nel1H4  19:50:13.605  19:56:13.311      4  $C9B264516E54A7B0...
+LOHinfpXSknqyLq6vTZiXKAK2VESnzRtK3/zZvdLLu8  19:50:13.606  19:56:13.311      4  $F4F171D168A4E696...
+GnHWn0QIpEYFmG6R2vVIJInDDKfCtCvPqUHSjgcHIAg  19:50:13.606  20:04:13.228      8  $C9B264516E54A7B0...
+F17nb8L/1DblJJPHXar2eDn2PSr3+zxR0pvCCYAVsxs  19:50:13.607  20:04:13.229      8  $1EA3B6AA5EBFD0EE...
+ePWIi5RHXqlTgS4ZTlUhjD+tAbgQq7ncGB65jrJpxpg  19:50:13.607  20:04:13.230      8  $95C37B1AC2F4587F...
+6IItQILN9s8dzxAgS69GUpcj9701mrCKRZ20JZOo4Ik  19:58:17.552  20:06:17.460      4  $C9B264516E54A7B0...
+KTTAGiXyr3QzflVDuLuD/uHlIjNreUoKvbREgdRhhTY  19:58:17.552  20:06:17.461      5  $F4F171D168A4E696...
+9Azr1SsYirPPxqvxFcCGilbT5jgyqUaeljTFhYhTYX8  19:58:17.553  20:06:17.461      5  $D7F2E6732DAEA3AF...
+lWvR2oWGn/bGVKN9HH6ZJYVgpkQGffKKLUHtWMM1gfg  20:06:18.461  20:06:18.461      1  $95C37B1AC2F4587F...
+a1cDtMLfC9ViHk5hnT5UlMrHVRnTs/wmv7qknZfkhV4  20:06:18.461  20:06:18.461      1  $1EA3B6AA5EBFD0EE...
+qbkoi6/Os1zSt5RKAZRn2YRJo6krDOAF9BPWwyO64R4  20:06:18.461  20:06:18.461      1  $F4F171D168A4E696...
+
+tor's OWN time-period descriptor rotations (upstream, unrelated to this patch):
+  Sep 20 19:56:17.318  rotate_all_descriptors
+  Sep 20 20:04:18.235  rotate_all_descriptors
+
+Each of those rebuilds the 'next' descriptor, which picks 3 brand-new introduction
+points with brand-new auth keys. That is why the total number of auth keys seen grows
+by 3 at each one. It is upstream tor behaviour, not an effect of the rotation patch:
+no auth key ever CHANGED during a rotation - new keys only ever appear alongside a
+rotate_all_descriptors event, and every key above keeps one fixed intro point for its
+whole life, however many times its circuit was rebuilt.
+
+2c. NO INTRODUCTION POINT WAS EVER RETIRED (obstacle 2 - the retry cap)
+-----------------------------------------------------------------------
+MAX_INTRO_POINT_CIRCUIT_RETRIES is 3. If deliberate rotations counted as retries, an
+intro point would be retired after 3 rotations and the descriptor would change.
+Rotation depth actually reached, per rotation number:
+  12 rotation #1
+   9 rotation #2
+  10 rotation #3
+   9 rotation #4
+   5 rotation #5
+   3 rotation #6
+   3 rotation #7
+   3 rotation #8
+
+Highest rotation number reached: 8  (cap is 3)
+Lines mentioning removing/retiring an intro point:
+  grep -icE "remov(e|ing) .*intro|retir|MAX_INTRO" notice.log  -> 0
+
+2d. THE PUBLISHED DESCRIPTOR IS BYTE-IDENTICAL ACROSS A ROTATION
+----------------------------------------------------------------
+Captured around the 20:02:13 rotation cycle (before at 20:02:05, after at 20:02:25).
+
+  service-side revision-counter before : revision-counter 525999
+  service-side revision-counter after  : revision-counter 525999
+  client-fetched revision-counter before: revision-counter 664457
+  client-fetched revision-counter after : revision-counter 664457
+
+The descriptor the CLIENT actually fetched and used is byte-identical before and after:
+  sha256 before: 2b2ee87161ff9211bd86f273fe3f7c98e52c5246507c140240765c0ee7b6ce53
+  sha256 after : 2b2ee87161ff9211bd86f273fe3f7c98e52c5246507c140240765c0ee7b6ce53
+  diff         : no differences
+
+CAVEAT, measured not assumed: the SERVICE-side dump (GETINFO hs/service/desc) does differ
+in its superencrypted blob and signature across the two captures. That is NOT a descriptor
+change - the service re-encodes and re-signs the descriptor on every GETINFO, with fresh
+randomness. Control test in 02-desc-CONTROL-no-rotation.txt: two dumps taken 3 seconds
+apart with NO rotation in between also differ in ciphertext and signature, while
+revision-counter and the signing-key certificate stay identical. The revision counter is
+the field that would increment on a real descriptor change, and it did not move.

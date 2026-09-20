@@ -1,0 +1,69 @@
+EVIDENCE 5 - MAKE BEFORE BREAK: WHO CLOSES THE OLD CIRCUIT
+==========================================================
+
+The mitigation only works if the service never closes the live introduction circuit
+before its replacement exists. The design relies on the relay doing it instead: when a
+second ESTABLISH_INTRO arrives under the SAME auth key, hs_circuitmap.c kills the older
+circuit holding that token. So the question is: who actually closed these circuits?
+
+5a. EVERY INTRO CIRCUIT CLOSE WAS A REMOTE DESTROY
+--------------------------------------------------
+Source: control-port CIRC events with PURPOSE=HS_SERVICE_INTRO, collected live for 360 s
+(20:05:39-20:11:45), raw in 04-cost-rotation-ON.txt. The control port reports both the
+local reason and, when the close came from the other end, REMOTE_REASON.
+
+  14 REASON=DESTROYED
+  14 REMOTE_REASON=DESTROYED
+
+  -> 14 closes, 14 of them carrying REMOTE_REASON=DESTROYED.
+  -> 0 closes without a REMOTE_REASON, i.e. the service closed none of them itself.
+
+Every one of those closed circuits was in HS_STATE=HSSI_ESTABLISHED, i.e. it was a live,
+serving introduction circuit, and it went away because the introduction relay sent a
+DESTROY cell - the duplicate-token kill firing after the replacement claimed the token.
+
+5b. THE SAME THING SEEN IN THE SERVICE'S OWN info.log
+-----------------------------------------------------
+All circuit close sites during the rotation-on run, with their reason codes:
+
+    59 src/core/or/command.c:682 (orig reason: 523
+    47 src/core/or/circuituse.c:1502 (orig reason: 9
+    26 src/core/or/circuituse.c:1478 (orig reason: 9
+    15 src/core/or/command.c:682 (orig reason: 521
+     7 src/core/or/circuitbuild.c:1112 (orig reason: 9
+     6 src/feature/hs/hs_service.c:867 (orig reason: 9
+     3 src/feature/hs/hs_circuitmap.c:163 (orig reason: 9
+
+Reason codes, from src/core/or/or.h in this tree:
+  END_CIRC_REASON_FLAG_REMOTE = 512  -> the close came from the other end
+  521 = 512 + 9  = FLAG_REMOTE | END_CIRC_REASON_FINISHED
+  523 = 512 + 11 = FLAG_REMOTE | END_CIRC_REASON_DESTROYED   (a DESTROY cell arrived)
+  9   = END_CIRC_REASON_FINISHED (a local close)
+
+src/core/or/command.c:682 is the handler for an incoming DESTROY cell, and it accounts
+for all 74 remote closes. The local closes at circuituse.c:1478/1502 are
+tor expiring unused general-purpose circuits, unrelated to introduction points.
+
+NOTE ON PER-CIRCUIT TIMING: it is tempting to print 'old circuit closed N ms after the
+replacement established' for each rotation. That cannot be done honestly from these logs.
+The service's rotation log prints a circuit's WIRE id, while circuit_mark_for_close_
+prints 'Circuit 0 (id: NNN)' - the wire id has already been cleared to 0, leaving only the
+global id - and within one cycle six circuits are launched within ~2 ms of each other, so
+matching the two id spaces by timestamp is ambiguous. An earlier version of this file did
+exactly that and produced nonsense (one row claimed a 120-second gap). It was removed.
+What IS established, without any matching, is the statement above: no intro circuit was
+ever closed by the service; every one was destroyed by the relay.
+
+5c. WHY THE SWAPPED LINE SAYS 'THE PREVIOUS CIRCUIT WAS ALREADY GONE'
+---------------------------------------------------------------------
+Most SWAPPED lines report that the old circuit was already gone rather than naming it:
+  'previous circuit was already gone': 58
+  'old circuit N is closed'          : 3
+
+This is a cosmetic logging artifact, not a behavioural problem. On this local network the
+relay's DESTROY for the old circuit arrives and unregisters it a few milliseconds before
+the service finishes processing INTRO_ESTABLISHED on the new one, so by the time the swap
+code looks the old circuit up it is already unregistered. The ordering that matters is
+still correct - the relay only sends that DESTROY because the replacement had already
+presented the same auth key. To print the old circuit id here, it would have to be stashed
+in the intro point struct at START instead of being looked up again at SWAPPED.

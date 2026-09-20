@@ -1,0 +1,102 @@
+EVIDENCE 1 - THE INTERNAL PATH CHANGES, THE INTRO POINT DOES NOT
+===============================================================
+Source: /Users/nicolasconstantinides/Downloads/chutney/net/nodes/010h/notice.log  (onion service node 010h)
+Method: every [intro-rotation] ESTABLISHED line prints the full four-hop path of the
+        replacement circuit at the moment INTRO_ESTABLISHED arrived. Lines are grouped
+        by auth key, which is the identity of one introduction point.
+Hop 1 = entry guard, hops 2-3 = internal middles, hop 4 = the introduction point.
+
+Relay fingerprint -> chutney nickname map (from GETINFO circuit-status):
+  F4F171D168A4E696805AB4248B119422A690B1D7  test004r
+  95C37B1AC2F4587F039D174B52C2532A14EEBD40  test005r
+  1EA3B6AA5EBFD0EE36A41FEC3FE8188B0F4C3E6F  test006r
+  C9B264516E54A7B0598012DF992ABB985924B0AB  test007r
+  D7F2E6732DAEA3AF70F62A7F3DCBF6CFA0CFB3E3  test008r
+
+=== auth key 6IItQILN9s8dzxAgS69GUpcj9701mrCKRZ20JZOo4Ik
+    introduction point (hop 4) for every row: $C9B264516E54A7B0598012DF992ABB985924B0AB
+  rot#1  19:58:17.572 circ 4048234415  F4F171D1  1EA3B6AA  95C37B1A  C9B26451
+  rot#2  20:00:17.804 circ 2973058681  F4F171D1  1EA3B6AA  95C37B1A  C9B26451   changed hops: NONE (identical path re-picked)
+  rot#3  20:04:17.255 circ 3812494385  F4F171D1  1EA3B6AA  95C37B1A  C9B26451   changed hops: NONE (identical path re-picked)
+
+=== auth key 9Azr1SsYirPPxqvxFcCGilbT5jgyqUaeljTFhYhTYX8
+    introduction point (hop 4) for every row: $D7F2E6732DAEA3AF70F62A7F3DCBF6CFA0CFB3E3
+  rot#1  19:58:17.572 circ 2971144895  F4F171D1  1EA3B6AA  95C37B1A  D7F2E673
+  rot#2  20:00:17.806 circ 3704771998  F4F171D1  1EA3B6AA  C9B26451  D7F2E673   changed hops: [3]
+  rot#3  20:02:17.041 circ 4087356860  F4F171D1  C9B26451  95C37B1A  D7F2E673   changed hops: [2, 3]
+  rot#4  20:04:17.258 circ 4160299805  F4F171D1  C9B26451  95C37B1A  D7F2E673   changed hops: NONE (identical path re-picked)
+
+=== auth key F17nb8L/1DblJJPHXar2eDn2PSr3+zxR0pvCCYAVsxs
+    introduction point (hop 4) for every row: $1EA3B6AA5EBFD0EE36A41FEC3FE8188B0F4C3E6F
+  rot#1  19:50:13.627 circ 3545136434  F4F171D1  D7F2E673  C9B26451  1EA3B6AA
+  rot#2  19:52:13.852 circ 2832897044  F4F171D1  D7F2E673  95C37B1A  1EA3B6AA   changed hops: [3]
+  rot#3  19:54:13.090 circ 3480136117  F4F171D1  C9B26451  D7F2E673  1EA3B6AA   changed hops: [2, 3]
+  rot#4  19:56:13.336 circ 3877214596  F4F171D1  D7F2E673  C9B26451  1EA3B6AA   changed hops: [2, 3]
+  rot#5  19:58:13.568 circ 2364923163  F4F171D1  D7F2E673  C9B26451  1EA3B6AA   changed hops: NONE (identical path re-picked)
+  rot#6  20:00:13.801 circ 3353945420  F4F171D1  C9B26451  D7F2E673  1EA3B6AA   changed hops: [2, 3]
+  rot#7  20:02:13.030 circ 3017956119  F4F171D1  D7F2E673  95C37B1A  1EA3B6AA   changed hops: [2, 3]
+  rot#8  20:04:13.252 circ 2176557617  F4F171D1  C9B26451  95C37B1A  1EA3B6AA   changed hops: [2]
+
+=== auth key FNf38cFr9hcUc5ZNlCi6MQTH4p//uljOB+Pb8Nel1H4
+    introduction point (hop 4) for every row: $C9B264516E54A7B0598012DF992ABB985924B0AB
+  rot#1  19:50:13.631 circ 3558332869  F4F171D1  1EA3B6AA  95C37B1A  C9B26451
+  rot#2  19:52:13.850 circ 4114204522  F4F171D1  1EA3B6AA  95C37B1A  C9B26451   changed hops: NONE (identical path re-picked)
+  rot#3  19:54:13.088 circ 2761088294  F4F171D1  D7F2E673  95C37B1A  C9B26451   changed hops: [2]
+  rot#4  19:56:13.337 circ 3730540743  F4F171D1  D7F2E673  95C37B1A  C9B26451   changed hops: NONE (identical path re-picked)
+
+=== auth key GnHWn0QIpEYFmG6R2vVIJInDDKfCtCvPqUHSjgcHIAg
+    introduction point (hop 4) for every row: $C9B264516E54A7B0598012DF992ABB985924B0AB
+  rot#1  19:50:13.626 circ 2875148823  F4F171D1  D7F2E673  95C37B1A  C9B26451
+  rot#2  19:52:13.850 circ 3319637922  F4F171D1  1EA3B6AA  95C37B1A  C9B26451   changed hops: [2]
+  rot#3  19:54:13.089 circ 2488494503  F4F171D1  D7F2E673  1EA3B6AA  C9B26451   changed hops: [2, 3]
+  rot#4  19:56:13.336 circ 2382932651  F4F171D1  D7F2E673  95C37B1A  C9B26451   changed hops: [3]
+  rot#5  19:58:13.567 circ 4231433027  F4F171D1  D7F2E673  95C37B1A  C9B26451   changed hops: NONE (identical path re-picked)
+  rot#6  20:00:13.798 circ 3467829447  F4F171D1  D7F2E673  95C37B1A  C9B26451   changed hops: NONE (identical path re-picked)
+  rot#7  20:02:13.030 circ 3417158212  F4F171D1  D7F2E673  95C37B1A  C9B26451   changed hops: NONE (identical path re-picked)
+  rot#8  20:04:13.249 circ 3576370155  F4F171D1  1EA3B6AA  D7F2E673  C9B26451   changed hops: [2, 3]
+
+=== auth key KTTAGiXyr3QzflVDuLuD/uHlIjNreUoKvbREgdRhhTY
+    introduction point (hop 4) for every row: $F4F171D168A4E696805AB4248B119422A690B1D7
+  rot#1  19:58:17.575 circ 3956565020  F4F171D1  D7F2E673  1EA3B6AA  F4F171D1
+  rot#2  20:00:17.805 circ 3800801904  F4F171D1  1EA3B6AA  D7F2E673  F4F171D1   changed hops: [2, 3]
+  rot#3  20:02:17.044 circ 3182627609  F4F171D1  D7F2E673  95C37B1A  F4F171D1   changed hops: [2, 3]
+  rot#4  20:04:17.256 circ 3655319200  F4F171D1  1EA3B6AA  95C37B1A  F4F171D1   changed hops: [2]
+
+=== auth key LOHinfpXSknqyLq6vTZiXKAK2VESnzRtK3/zZvdLLu8
+    introduction point (hop 4) for every row: $F4F171D168A4E696805AB4248B119422A690B1D7
+  rot#1  19:50:13.632 circ 3470266812  F4F171D1  1EA3B6AA  95C37B1A  F4F171D1
+  rot#2  19:52:13.854 circ 2359303957  F4F171D1  D7F2E673  1EA3B6AA  F4F171D1   changed hops: [2, 3]
+  rot#3  19:54:13.091 circ 3484854119  F4F171D1  C9B26451  95C37B1A  F4F171D1   changed hops: [2, 3]
+  rot#4  19:56:13.334 circ 3068306977  F4F171D1  D7F2E673  1EA3B6AA  F4F171D1   changed hops: [2, 3]
+
+=== auth key Lpef7nDxPOYqqmmVB7mpilBK8lvJwG5BNMQv29LHW4Y
+    introduction point (hop 4) for every row: $D7F2E6732DAEA3AF70F62A7F3DCBF6CFA0CFB3E3
+  rot#1  19:50:13.625 circ 2617030872  F4F171D1  C9B26451  95C37B1A  D7F2E673
+  rot#2  19:52:13.855 circ 3281149190  F4F171D1  C9B26451  1EA3B6AA  D7F2E673   changed hops: [3]
+  rot#3  19:54:13.091 circ 4111064647  F4F171D1  1EA3B6AA  C9B26451  D7F2E673   changed hops: [2, 3]
+  rot#4  19:56:13.331 circ 2594520751  F4F171D1  1EA3B6AA  C9B26451  D7F2E673   changed hops: NONE (identical path re-picked)
+
+=== auth key ePWIi5RHXqlTgS4ZTlUhjD+tAbgQq7ncGB65jrJpxpg
+    introduction point (hop 4) for every row: $95C37B1AC2F4587F039D174B52C2532A14EEBD40
+  rot#1  19:50:13.629 circ 3253430466  F4F171D1  1EA3B6AA  D7F2E673  95C37B1A
+  rot#2  19:52:13.855 circ 2161935018  F4F171D1  1EA3B6AA  D7F2E673  95C37B1A   changed hops: NONE (identical path re-picked)
+  rot#3  19:54:13.088 circ 2275807043  F4F171D1  D7F2E673  1EA3B6AA  95C37B1A   changed hops: [2, 3]
+  rot#4  19:56:13.336 circ 2571442055  F4F171D1  D7F2E673  1EA3B6AA  95C37B1A   changed hops: NONE (identical path re-picked)
+  rot#5  19:58:13.570 circ 2311040063  F4F171D1  C9B26451  D7F2E673  95C37B1A   changed hops: [2, 3]
+  rot#6  20:00:13.802 circ 3177317638  F4F171D1  1EA3B6AA  C9B26451  95C37B1A   changed hops: [2, 3]
+  rot#7  20:02:13.031 circ 3787441250  F4F171D1  C9B26451  D7F2E673  95C37B1A   changed hops: [2, 3]
+  rot#8  20:04:13.250 circ 2304356930  F4F171D1  D7F2E673  C9B26451  95C37B1A   changed hops: [2, 3]
+
+SUMMARY OF CONSECUTIVE-ROTATION PATH COMPARISONS
+  comparisons made                        : 38
+  hop 1 (entry guard) changed             : 0   -- the guard is pinned, as expected
+  hop 4 (introduction point) changed      : 0   -- this is the whole point of the mitigation
+  at least one middle hop (2 or 3) changed: 26
+  path re-picked identical to the previous: 12
+
+NOTE, stated plainly: this network has only 5 relays (test004r..test008r). After pinning
+hop 1 to the guard and hop 4 to the intro point, tor picks hops 2 and 3 from a pool of
+about 3 candidates, so a fresh, independent path selection sometimes lands on the same
+two middles it used before. That is a property of a 5-relay test network, not of the
+patch: the circuit is genuinely torn down and rebuilt each time (new circuit id every
+row above). On the real Tor network the middle hops are drawn from thousands of relays.

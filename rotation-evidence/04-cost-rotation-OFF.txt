@@ -1,0 +1,10 @@
+# label=rotation-OFF-HiddenServiceIntroCircuitRotation-0 node=010h window=360s
+# counted CIRC events with PURPOSE=HS_SERVICE_INTRO from the service's control port
+# started 20:13:32  ended 20:19:58
+LAUNCHED   0
+EXTENDED   0
+BUILT      0
+CLOSED     0
+FAILED     0
+
+# raw events
