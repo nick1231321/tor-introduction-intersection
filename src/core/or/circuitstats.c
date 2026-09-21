@@ -706,8 +706,20 @@ circuit_build_times_handle_completed_hop(origin_circuit_t *circ)
       circuit_any_opened_circuits_cached()) {
 
     /* Circuits are allowed to last longer for measurement.
-     * Switch their purpose and wait. */
-    if (circ->base_.purpose != CIRCUIT_PURPOSE_C_MEASURE_TIMEOUT) {
+     * Switch their purpose and wait.
+     *
+     * Except for a replacement introduction circuit launched by the onion
+     * service introduction circuit rotation (see
+     * HiddenServiceIntroCircuitRotation): converting it to a
+     * measurement-only circuit would silently lose the rebuild, because
+     * such a circuit only counts once it answers INTRO_ESTABLISHED. It is
+     * exempt from the adaptive timeout in circuit_expire_building() for the
+     * same reason, and the service applies its own deadline to it instead.
+     * Note that we exempt it from the conversion only: it still contributes
+     * its build time below, exactly like any other circuit, so the timeout
+     * keeps being learned from it. */
+    if (circ->base_.purpose != CIRCUIT_PURPOSE_C_MEASURE_TIMEOUT &&
+        !circuit_is_intro_rotation_replacement(TO_CIRCUIT(circ))) {
       log_info(LD_CIRC,
                "Deciding to timeout circuit %"PRIu32,
                (circ->global_identifier));

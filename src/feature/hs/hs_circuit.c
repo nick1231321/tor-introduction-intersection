@@ -1058,6 +1058,10 @@ hs_circ_retry_service_rendezvous_point(const origin_circuit_t *circ)
  *     for the current retry period, because a rotation is not a retry and
  *     must not starve genuine relaunches.
  *
+ * If circ_out is not NULL, it is set to the circuit that was launched on
+ * success, and left untouched otherwise. The rotation code uses it to keep
+ * track of the replacement circuit it has in flight.
+ *
  * Return 0 if the circuit was successfully launched and tagged
  * with the correct identifier. On error, a negative value is returned. */
 int
@@ -1065,7 +1069,8 @@ hs_circ_launch_intro_point(hs_service_t *service,
                            const hs_service_intro_point_t *ip,
                            extend_info_t *ei,
                            bool direct_conn,
-                           bool is_rotation)
+                           bool is_rotation,
+                           origin_circuit_t **circ_out)
 {
   /* Standard flags for introduction circuit. */
   int ret = -1, circ_flags = CIRCLAUNCH_NEED_UPTIME | CIRCLAUNCH_IS_INTERNAL;
@@ -1132,6 +1137,10 @@ hs_circ_launch_intro_point(hs_service_t *service,
   } else {
     /* Register circuit in the global circuitmap. */
     register_intro_circ(ip, circ);
+  }
+
+  if (circ_out != NULL) {
+    *circ_out = circ;
   }
 
   /* Success. */

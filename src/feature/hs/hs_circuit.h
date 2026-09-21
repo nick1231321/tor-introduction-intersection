@@ -51,7 +51,8 @@ int hs_circ_launch_intro_point(hs_service_t *service,
                                const hs_service_intro_point_t *ip,
                                extend_info_t *ei,
                                bool direct_conn,
-                               bool is_rotation);
+                               bool is_rotation,
+                               origin_circuit_t **circ_out);
 void hs_circ_service_register_intro_circ(const hs_service_intro_point_t *ip,
                                          origin_circuit_t *circ);
 int hs_circ_launch_rendezvous_point(const hs_service_t *service,

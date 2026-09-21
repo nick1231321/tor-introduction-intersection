@@ -2895,6 +2895,136 @@ rotate_all_descriptors(time_t now)
   } FOR_EACH_SERVICE_END;
 }
 
+/** Return the deadline, in seconds, that we give a replacement introduction
+ * circuit to answer INTRO_ESTABLISHED before we abandon it.
+ *
+ * It is derived from the configured rotation interval -- half of it, clamped
+ * to [HS_SERVICE_INTRO_ROTATION_DEADLINE_MIN,
+ * HS_SERVICE_INTRO_ROTATION_DEADLINE_MAX] -- so that the rotation timing
+ * depends only on HiddenServiceIntroCircuitRotation and on nothing else. In
+ * particular these circuits are exempt from the adaptive circuit build
+ * timeout (see circuit_is_intro_rotation_replacement() in circuituse.c), so
+ * this deadline is the only thing that bounds them. */
+static time_t
+intro_rotation_deadline(const hs_service_t *service)
+{
+  uint32_t deadline = service->config.intro_circuit_rotation_time / 2;
+
+  if (deadline < HS_SERVICE_INTRO_ROTATION_DEADLINE_MIN) {
+    deadline = HS_SERVICE_INTRO_ROTATION_DEADLINE_MIN;
+  }
+  if (deadline > HS_SERVICE_INTRO_ROTATION_DEADLINE_MAX) {
+    deadline = HS_SERVICE_INTRO_ROTATION_DEADLINE_MAX;
+  }
+  return (time_t) deadline;
+}
+
+/** Note that a rotation attempt for ip has failed, one way or another.
+ *
+ * We retry on the next housekeeping tick, that is one second later, rather
+ * than waiting a whole interval: a lost rebuild would otherwise make the
+ * effective rotation period a multiple of the configured one. To make sure
+ * that cannot spin, after HS_SERVICE_INTRO_ROTATION_MAX_FAILURES consecutive
+ * failures we fall back to waiting one full rotation interval. */
+static void
+note_intro_rotation_failure(const hs_service_t *service,
+                            hs_service_intro_point_t *ip, time_t now)
+{
+  ip->rotation_failures++;
+  if (ip->rotation_failures < HS_SERVICE_INTRO_ROTATION_MAX_FAILURES) {
+    /* Try again on the next tick. */
+    return;
+  }
+
+  ip->rotation_backoff_until =
+    now + (time_t) service->config.intro_circuit_rotation_time;
+  log_notice(LD_REND,
+             "[intro-rotation] BACKOFF service %s intro point %s: %u "
+             "consecutive rotation attempts failed. Waiting one full "
+             "HiddenServiceIntroCircuitRotation interval (%" PRIu32 " "
+             "seconds) before trying again. The current circuit keeps "
+             "serving throughout.",
+             safe_str_client(service->onion_address),
+             safe_str_client(describe_intro_point(ip)),
+             ip->rotation_failures,
+             service->config.intro_circuit_rotation_time);
+  ip->rotation_failures = 0;
+}
+
+/** Return the replacement introduction circuit currently in flight for ip,
+ * or NULL if there is none (any more). Only meaningful while
+ * ip->rotation_launched_ts is non zero. */
+static origin_circuit_t *
+get_intro_rotation_circ(const hs_service_intro_point_t *ip)
+{
+  origin_circuit_t *circ;
+
+  if (ip->rotation_circ_gid == 0) {
+    return NULL;
+  }
+  circ = circuit_get_by_global_id(ip->rotation_circ_gid);
+  if (circ == NULL || TO_CIRCUIT(circ)->marked_for_close ||
+      TO_CIRCUIT(circ)->purpose != CIRCUIT_PURPOSE_S_ESTABLISH_INTRO ||
+      circ->hs_ident == NULL || !circ->hs_ident->is_intro_rotation) {
+    return NULL;
+  }
+  return circ;
+}
+
+/** Look after the replacement introduction circuit that is currently in
+ * flight for ip: give up on it if it has died on its own, or if it has not
+ * answered INTRO_ESTABLISHED by our deadline.
+ *
+ * Either way the live circuit is untouched and keeps serving; only the
+ * replacement is closed. The caller does nothing else for this intro point
+ * on this tick, so a fresh attempt starts on the next one. */
+static void
+handle_intro_rotation_in_flight(hs_service_t *service,
+                                hs_service_intro_point_t *ip, time_t now)
+{
+  origin_circuit_t *rot_circ = get_intro_rotation_circ(ip);
+  time_t deadline = intro_rotation_deadline(service);
+
+  if (rot_circ == NULL) {
+    /* The replacement died before establishing. Nothing to close. */
+    log_notice(LD_REND,
+               "[intro-rotation] FAILED service %s intro point %s: the "
+               "replacement introduction circuit went away after %ld seconds "
+               "without establishing. The current circuit keeps serving; "
+               "retrying on the next tick.",
+               safe_str_client(service->onion_address),
+               safe_str_client(describe_intro_point(ip)),
+               (long) (now - ip->rotation_launched_ts));
+    goto failed;
+  }
+
+  if ((now - ip->rotation_launched_ts) < deadline) {
+    /* Still building, within our deadline. Let it work. */
+    return;
+  }
+
+  log_notice(LD_REND,
+             "[intro-rotation] ABANDONED service %s intro point %s: "
+             "replacement circuit %u did not answer INTRO_ESTABLISHED within "
+             "our deadline of %ld seconds (half of "
+             "HiddenServiceIntroCircuitRotation %" PRIu32 ", clamped to "
+             "[%d, %d]). Closing the replacement; the current circuit keeps "
+             "serving; retrying on the next tick.",
+             safe_str_client(service->onion_address),
+             safe_str_client(describe_intro_point(ip)),
+             TO_CIRCUIT(rot_circ)->n_circ_id,
+             (long) deadline,
+             service->config.intro_circuit_rotation_time,
+             HS_SERVICE_INTRO_ROTATION_DEADLINE_MIN,
+             HS_SERVICE_INTRO_ROTATION_DEADLINE_MAX);
+  circuit_mark_for_close(TO_CIRCUIT(rot_circ), END_CIRC_REASON_TIMEOUT);
+
+ failed:
+  ip->rotation_launched_ts = 0;
+  ip->rotation_circ_gid = 0;
+  note_intro_rotation_failure(service, ip, now);
+}
+
 /** Launch a replacement introduction circuit for the given established intro
  * point, keeping the SAME introduction point relay and the SAME authentication
  * key, and therefore the same descriptor.
@@ -2914,6 +3044,7 @@ launch_intro_circuit_rotation(hs_service_t *service,
 {
   int ret = -1;
   extend_info_t *ei;
+  origin_circuit_t *rot_circ = NULL;
 
   tor_assert(service);
   tor_assert(ip);
@@ -2952,19 +3083,22 @@ launch_intro_circuit_rotation(hs_service_t *service,
    * rotation is not a failure and must not count towards
    * MAX_INTRO_POINT_CIRCUIT_RETRIES, or should_remove_intro_point() would
    * drop the intro point after three rotations and change the descriptor. */
-  if (hs_circ_launch_intro_point(service, ip, ei, false, true) < 0) {
+  if (hs_circ_launch_intro_point(service, ip, ei, false, true,
+                                 &rot_circ) < 0 || rot_circ == NULL) {
     log_notice(LD_REND,
                "[intro-rotation] Service %s: failed to launch the replacement "
                "introduction circuit for intro point %s. The current circuit "
-               "keeps serving; will try again.",
+               "keeps serving; retrying on the next tick.",
                safe_str_client(service->onion_address),
                safe_str_client(describe_intro_point(ip)));
     goto end;
   }
 
   /* A rotation is now in flight for this intro point. Cleared when the
-   * replacement establishes, or after HS_SERVICE_INTRO_ROTATION_TIMEOUT. */
+   * replacement establishes, or when we abandon it on the deadline returned
+   * by intro_rotation_deadline(). */
   ip->rotation_launched_ts = now;
+  ip->rotation_circ_gid = rot_circ->global_identifier;
   ret = 0;
 
  end:
@@ -3001,7 +3135,18 @@ run_intro_circuit_rotation(hs_service_t *service, time_t now)
   FOR_EACH_DESCRIPTOR_BEGIN(service, desc) {
     DIGEST256MAP_FOREACH_MODIFY(desc->intro_points.map, key,
                                 hs_service_intro_point_t *, ip) {
-      origin_circuit_t *circ = hs_circ_service_get_established_intro_circ(ip);
+      origin_circuit_t *circ;
+
+      /* Is a replacement already being built? Only one at a time, so this is
+       * all we do for this intro point on this tick: either it is still
+       * within our deadline, or we have just given up on it and a fresh
+       * attempt starts on the next tick. */
+      if (ip->rotation_launched_ts != 0) {
+        handle_intro_rotation_in_flight(service, ip, now);
+        continue;
+      }
+
+      circ = hs_circ_service_get_established_intro_circ(ip);
 
       /* Only rotate an intro point that is currently up and serving. */
       if (circ == NULL || TO_CIRCUIT(circ)->marked_for_close) {
@@ -3014,28 +3159,25 @@ run_intro_circuit_rotation(hs_service_t *service, time_t now)
         continue;
       }
 
-      /* Is a replacement already being built? Only one at a time. */
-      if (ip->rotation_launched_ts != 0) {
-        if (now - ip->rotation_launched_ts <
-            HS_SERVICE_INTRO_ROTATION_TIMEOUT) {
+      /* Too many attempts in a row have failed: we are waiting one full
+       * interval instead of retrying every second. */
+      if (ip->rotation_backoff_until != 0) {
+        if (now < ip->rotation_backoff_until) {
           continue;
         }
-        log_notice(LD_REND,
-                   "[intro-rotation] Service %s: the replacement introduction "
-                   "circuit for intro point %s did not establish within %d "
-                   "seconds. Circuit %u keeps serving; trying again.",
-                   safe_str_client(service->onion_address),
-                   safe_str_client(describe_intro_point(ip)),
-                   HS_SERVICE_INTRO_ROTATION_TIMEOUT,
-                   TO_CIRCUIT(circ)->n_circ_id);
-        ip->rotation_launched_ts = 0;
+        ip->rotation_backoff_until = 0;
       }
 
+      /* Note that after a failed attempt this is still true -- the circuit
+       * serving the intro point has not been replaced -- which is precisely
+       * what makes the retry happen on the very next tick. */
       if ((now - ip->circuit_established_ts) < (time_t) rotation_time) {
         continue;
       }
 
-      launch_intro_circuit_rotation(service, ip, circ, now);
+      if (launch_intro_circuit_rotation(service, ip, circ, now) < 0) {
+        note_intro_rotation_failure(service, ip, now);
+      }
     } DIGEST256MAP_FOREACH_END;
   } FOR_EACH_DESCRIPTOR_END;
 }
@@ -3161,7 +3303,7 @@ launch_intro_point_circuits(hs_service_t *service)
       /* Launch a circuit to the intro point. */
       ip->circuit_retries++;
       if (hs_circ_launch_intro_point(service, ip, ei, direct_conn,
-                                     false) < 0) {
+                                     false, NULL) < 0) {
         log_info(LD_REND, "Unable to launch intro circuit to node %s "
                           "for service %s.",
                  safe_str_client(extend_info_describe(ei)),
@@ -3963,6 +4105,9 @@ service_handle_intro_established(origin_circuit_t *circ,
    * run_intro_circuit_rotation() can decide when to rebuild it. */
   ip->circuit_established_ts = approx_time();
   ip->rotation_launched_ts = 0;
+  ip->rotation_circ_gid = 0;
+  ip->rotation_failures = 0;
+  ip->rotation_backoff_until = 0;
 
   if (service->config.intro_circuit_rotation_time > 0) {
     /* Belt and braces against the retry accounting retiring this intro point:

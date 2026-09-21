@@ -40,10 +40,36 @@
 #define HS_SERVICE_POW_SEED_ROTATE_TIME_MIN (7200 - 900)
 #define HS_SERVICE_POW_SEED_ROTATE_TIME_MAX (7200)
 
-/** How long (in seconds) we give a replacement ("rotation") introduction
- * circuit to answer with INTRO_ESTABLISHED before we give up on it and allow
- * a new rotation attempt. The old circuit keeps serving the whole time. */
-#define HS_SERVICE_INTRO_ROTATION_TIMEOUT 120
+/** How long we give a replacement ("rotation") introduction circuit to answer
+ * with INTRO_ESTABLISHED before we abandon it and close it, in seconds.
+ *
+ * The deadline is derived from the configured rotation interval -- half of
+ * it, clamped to [MIN, MAX] -- rather than being a fixed value, so that the
+ * rotation timing depends only on HiddenServiceIntroCircuitRotation. It is
+ * our own bound and the only thing that bounds these circuits: they are
+ * exempt from the adaptive circuit build timeout (see
+ * circuit_is_intro_rotation_replacement() in circuituse.c). The old circuit
+ * keeps serving the whole time. */
+#define HS_SERVICE_INTRO_ROTATION_DEADLINE_MIN 30
+#define HS_SERVICE_INTRO_ROTATION_DEADLINE_MAX 120
+
+/** Absolute upper bound, in seconds, on how long a replacement introduction
+ * circuit may stay exempt from the adaptive circuit build timeout.
+ *
+ * The service abandons a replacement at intro_rotation_deadline(), which is
+ * never more than HS_SERVICE_INTRO_ROTATION_DEADLINE_MAX. A replacement that
+ * is still building well past that has lost the introduction point it
+ * belonged to -- the descriptor rotated under it and the intro point was
+ * freed -- so nothing will ever abandon it. Past this bound we stop exempting
+ * it and let tor's usual expiry collect it. */
+#define HS_SERVICE_INTRO_ROTATION_EXEMPT_MAX \
+  (2 * HS_SERVICE_INTRO_ROTATION_DEADLINE_MAX)
+
+/** How many consecutive rotation attempts for one introduction point may
+ * fail (abandoned on our deadline, or not launched at all) before we stop
+ * retrying on the next housekeeping tick and wait a full rotation interval
+ * instead. This is what keeps immediate retries from spinning. */
+#define HS_SERVICE_INTRO_ROTATION_MAX_FAILURES 3
 
 /** Collected metrics for a specific service. */
 typedef struct hs_service_metrics_t {
@@ -114,6 +140,23 @@ typedef struct hs_service_intro_point_t {
    * is in flight. Used both to avoid launching one replacement per second
    * and to time out a replacement that never answers. */
   time_t rotation_launched_ts;
+
+  /** Introduction circuit rotation: the global identifier of the replacement
+   * circuit currently in flight, so we can close it ourselves if it misses
+   * our deadline, and notice early if it dies on its own. Only meaningful
+   * while rotation_launched_ts is non zero. */
+  uint32_t rotation_circ_gid;
+
+  /** Introduction circuit rotation: how many rotation attempts in a row have
+   * failed for this intro point. Reset by a successful establishment. */
+  uint32_t rotation_failures;
+
+  /** Introduction circuit rotation: if non zero, do not attempt another
+   * rotation for this intro point before this time. Set only after
+   * HS_SERVICE_INTRO_ROTATION_MAX_FAILURES consecutive failures, so that a
+   * persistently failing path falls back to one attempt per interval instead
+   * of retrying every second. */
+  time_t rotation_backoff_until;
 
   /** Introduction circuit rotation: how many times the internal path of this
    * intro point has been successfully replaced. Logging only. */

@@ -53,6 +53,7 @@
 #include "feature/hs/hs_common.h"
 #include "feature/hs/hs_ident.h"
 #include "feature/hs/hs_metrics.h"
+#include "feature/hs/hs_service.h"
 #include "feature/hs/hs_stats.h"
 #include "feature/nodelist/describe.h"
 #include "feature/nodelist/networkstatus.h"
@@ -430,6 +431,52 @@ circuit_conforms_to_options(const origin_circuit_t *circ,
 #endif /* 0 */
 
 /**
+ * Return true iff <b>circ</b> is a replacement introduction circuit launched
+ * by the onion service introduction circuit rotation code
+ * (HiddenServiceIntroCircuitRotation).
+ *
+ * Such a circuit is a make-before-break replacement for an introduction
+ * circuit that is currently established and serving: its introduction point
+ * relay and its authentication key are the ones already in the descriptor,
+ * and only the internal path leading to that relay is being rebuilt. It is
+ * deliberately kept out of the service side circuitmap until its
+ * INTRO_ESTABLISHED arrives, so if it is expired here the rebuild is simply
+ * lost: the old circuit keeps serving and the effective rotation period
+ * silently becomes a multiple of the configured one.
+ *
+ * The flag is only ever set when HiddenServiceIntroCircuitRotation is
+ * enabled, and we additionally require the service side establish-intro
+ * purpose here, so no other circuit purpose is affected.
+ *
+ * Used here and by circuit_build_times_handle_completed_hop(), which is the
+ * other place the adaptive timeout can turn a circuit into a measurement-only
+ * one.
+ */
+int
+circuit_is_intro_rotation_replacement(const circuit_t *circ)
+{
+  const origin_circuit_t *ocirc;
+
+  if (circ->purpose != CIRCUIT_PURPOSE_S_ESTABLISH_INTRO ||
+      !CIRCUIT_IS_ORIGIN(circ)) {
+    return 0;
+  }
+  ocirc = CONST_TO_ORIGIN_CIRCUIT(circ);
+  if (ocirc->hs_ident == NULL || !ocirc->hs_ident->is_intro_rotation) {
+    return 0;
+  }
+  /* Safety net. The service abandons a replacement it is still waiting for
+   * well before this. One that is still here has lost its introduction point
+   * -- the descriptor rotated under it -- so nobody is going to abandon it;
+   * stop exempting it and let the usual expiry collect it. */
+  if (approx_time() - circ->timestamp_began.tv_sec >
+      HS_SERVICE_INTRO_ROTATION_EXEMPT_MAX) {
+    return 0;
+  }
+  return 1;
+}
+
+/**
  * Close all circuits that start at us, aren't open, and were born
  * at least CircuitBuildTimeout seconds ago.
  *
@@ -551,6 +598,21 @@ circuit_expire_building(void)
     if (!CIRCUIT_IS_ORIGIN(victim) || /* didn't originate here */
         victim->marked_for_close)     /* don't mess with marked circs */
       continue;
+
+    /* Introduction circuit rotation (HiddenServiceIntroCircuitRotation): a
+     * replacement introduction circuit is exempt from the adaptive circuit
+     * build timeout. Letting the adaptive timeout turn it into a
+     * measurement-only circuit, or close it outright once it is open and
+     * still waiting for INTRO_ESTABLISHED, silently drops the rebuild and
+     * makes the real rotation period a multiple of the configured one. The
+     * service applies its own deadline to these circuits instead (see
+     * run_intro_circuit_rotation() in hs_service.c), so they cannot linger.
+     *
+     * We only skip the expiry here: circuits that do complete still feed the
+     * circuit build times as usual, so timeout learning is unaffected. */
+    if (circuit_is_intro_rotation_replacement(victim)) {
+      continue;
+    }
 
     /* If we haven't yet started the first hop, it means we don't have
      * any orconns available, and thus have not started counting time yet
