@@ -26,6 +26,7 @@ Nothing here is simulated, reconstructed or estimated.
 | the service never closes the live circuit | every intro-circuit close carried `REMOTE_REASON=DESTROYED` — the relay did it | `05-make-before-break.txt` |
 | cost, rotation on | 18 intro circuits launched in 360 s (3 cycles x 6 intro points) | `04-cost.txt` |
 | cost, rotation off | 0 intro circuits launched in 360 s | `04-cost.txt` |
+| **the rotation period is the configured one** | rebuilds lost 14.2% -> 3.0%; interval max 480 s -> 121 s, mean 133.9 s -> 120.1 s, with 120 s configured | `06-rotation-period.txt` |
 
 ## The network these were taken from
 
@@ -69,6 +70,13 @@ D7F2E6732DAEA3AF70F62A7F3DCBF6CFA0CFB3E3  test008r
 | `logs/info.log.rotation-ON.gz` | The matching info log, gzipped (1.6 MB raw). |
 | `logs/info.log.rotation-ON.relevant-lines.txt` | The same info log filtered to the lines the evidence cites (rotation, descriptor, circuit-close). |
 | `logs/notice.log.rotation-OFF` | The service's notice log for the rotation-off comparison run. Contains zero `intro-rotation` lines, which is the point. |
+| `06-rotation-period.txt` | **Claim 6.** Before/after the adaptive-circuit-build-timeout fix: rebuilds attempted vs completed, why the lost ones were lost (traced circuit by circuit), and the distribution of real intervals between consecutive swaps. |
+| `rotation-interval-stats.py` | Script behind 6a, 6c and 6e: counts rotation events in a notice log and prints the interval distribution per introduction point (keyed by auth key). |
+| `rotation-timeout-correlate.py` | Script behind 6b: joins the `[intro-rotation]` notices to the info log's circuit-build-timeout decisions and says which rebuilds the timeout claimed. |
+| `logs/notice.log.period-BEFORE.gz` | Service notice log for the 17-hour run BEFORE the fix (commit `b63417722`). |
+| `logs/notice.log.period-AFTER` | Service notice log for the 73.5-minute run AFTER the fix (commit `f68858718`). |
+| `logs/info.log.period-BEFORE.timeout-lines.txt.gz` | The BEFORE info log filtered to the circuit-build-timeout and intro-point-removal lines that 6b cites. |
+| `logs/info.log.period-AFTER.relevant-lines.txt.gz` | The AFTER info log filtered to the rotation, timeout, descriptor-rotation and circuit-creation lines that 6b and 6d cite. |
 
 ## How to re-derive the headline numbers
 
@@ -113,6 +121,9 @@ These are stated in full in the individual files; collected here so they are not
    replacement circuit hits tor's adaptive circuit-build timeout while building, and tor
    converts it into a build-time measurement circuit. None caused an outage — the old
    circuit was still serving — and the next cycle retried successfully.
+   **This has since been fixed** (commit `f68858718`) and re-measured: see
+   `06-rotation-period.txt`. Everything in files 1–5 was collected before that fix, so
+   the loss rate it describes is the pre-fix one.
 4. The cost comparison restarts the service node to flip the option. The measurement
    window in both cases starts after the service has settled, so neither number
    includes the initial burst of intro-circuit builds at startup.

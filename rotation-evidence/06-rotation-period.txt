@@ -1,0 +1,270 @@
+EVIDENCE 6 - THE ROTATION PERIOD NOW DEPENDS ONLY ON THE CONFIGURED PARAMETER
+=============================================================================
+
+The problem, restated
+---------------------
+Evidence 3 and note 3 in README.md recorded that some rotation attempts did not
+complete: the replacement introduction circuit hit tor's ADAPTIVE circuit-build
+timeout while it was still building, and tor converted it into a build-time
+measurement circuit. Nothing broke - the old circuit was still serving, which is what
+make-before-break is for - but that rebuild was lost, and the intro point kept its old
+path for another whole period. The effective rotation interval therefore became a
+MULTIPLE of HiddenServiceIntroCircuitRotation, at a rate decided by the network, not by
+the operator.
+
+This file measures that before and after the fix, from the service's own logs.
+
+Both runs: the same private Chutney network (`networks/hs-v3-rotation`), the same onion
+service `xk335k6vqeexv3qpnn3jlvlbee4vcgp3lccmiusq5qem3wpxmr6cu7yd.onion`, the same
+`HiddenServiceIntroCircuitRotation 120`, 6 introduction points live at a time
+(3 for the descriptor clients are using, 3 for its successor).
+
+  BEFORE : tor built at commit b63417722 (branch tip before the fix)
+           2026-09-20 20:21:12 .. 2026-09-21 13:30:50   (17 h 09 m)
+           logs/notice.log.period-BEFORE.gz
+  AFTER  : tor built at commit f68858718 (the fix)
+           2026-09-21 13:40:50 .. 2026-09-21 14:54:18   (73.5 min; 195 completed
+           rebuilds over 6 live introduction points, i.e. about 33 full rotation
+           cycles, and 36 elapsed 120-second periods)
+           logs/notice.log.period-AFTER
+
+
+6a. REBUILDS ATTEMPTED vs REBUILDS COMPLETED
+--------------------------------------------
+Counted from the notice log: one `[intro-rotation] START` per attempt, one
+`[intro-rotation] SWAPPED` per completed rebuild.
+
+                                       BEFORE            BEFORE            AFTER
+                                    (full 17 h)   (first 70 min)     (73.5 min)
+  rebuilds attempted   (START)            2899              201             201
+  rebuilds completed   (SWAPPED)          2488              173             195
+  rebuilds lost                            411               28               6
+  lost as a share of attempts            14.2%            13.9%            3.0%
+
+  of the lost ones:
+    abandoned on our deadline (ABANDONED)    -                -               0
+    replacement died early    (FAILED)       -                -               0
+    interval fallback         (BACKOFF)      -                -               0
+
+The 70-minute BEFORE window is the first 70 minutes after the 2026-09-20 20:21 restart,
+chosen so it is the same length and the same "freshly started service" state as the
+AFTER run. It contains exactly the same number of attempts (201), which makes the two
+columns directly comparable: 28 lost then, 6 now.
+
+
+6b. WHY THEY WERE LOST, AND WHY THEY ARE NOT ANY MORE
+------------------------------------------------------
+The adaptive timeout can convert a building circuit into a measurement-only circuit in
+two places. Each logs a distinguishable line at info level:
+
+  circuit_build_times_handle_completed_hop()  circuitstats.c  "Deciding to timeout circuit N"
+  circuit_expire_building()                   circuituse.c    "Deciding to count the timeout for circuit N"
+
+Those lines print tor's GLOBAL circuit id; the `[intro-rotation]` notices print the WIRE
+circuit id. The two are joined through the `origin_circuit_new: Circuit N chose an idle
+timeout` line that immediately precedes each `BUILDING` notice (hs_circ_launch_intro_point()
+logs BUILDING right after the circuit is created). Script:
+`rotation-timeout-correlate.py`.
+
+  BEFORE  (logs/info.log.period-BEFORE.timeout-lines.txt.gz)
+    replacement introduction circuits launched          2899
+      established                                       2488
+      never established                                  411
+    "Deciding to timeout circuit N"                      860 distinct circuits
+    "Deciding to count the timeout for circuit N"          0 distinct circuits
+    LOST rebuilds whose circuit the timeout claimed   404 / 411   (98.3%)
+    COMPLETED rebuilds whose circuit it claimed         0 / 2488
+
+  AFTER   (logs/info.log.period-AFTER.relevant-lines.txt.gz)
+    replacement introduction circuits launched           201
+      established                                        195
+      never established                                    6
+    "Deciding to timeout circuit N"                       62 distinct circuits
+    "Deciding to count the timeout for circuit N"          0 distinct circuits
+    LOST rebuilds whose circuit the timeout claimed     0 / 6
+    COMPLETED rebuilds whose circuit it claimed         0 / 195
+
+  -> Before: 404 of the 411 lost rebuilds were killed by the adaptive timeout, and not
+     one of the 2488 successful ones was. That is the cause, isolated.
+  -> After : 0 of 201 replacement circuits were touched by it.
+  -> The timeout is NOT disabled: 62 other circuits were still converted during the
+     AFTER run, and the learned value is still being updated (423 updates,
+     "Set circuit build timeout to 16..17ms"). The exemption applies to replacement
+     introduction circuits only.
+
+WHY 16 ms. On this loopback network the adaptive timeout is learned from 3-hop circuits
+that build in a few milliseconds, so it settles at 15-17 ms. A replacement introduction
+circuit is FOUR hops and takes roughly 25 ms to build. It was therefore past the timeout
+before it could ever finish - which is why the loss rate was as high as 14%. On the real
+network the margin is wider and the loss rate would be lower, but the failure mode is
+the same one and it is unbounded from the operator's point of view, which is the point
+of the fix.
+
+
+6c. THE NUMBER THAT MATTERS: INTERVALS BETWEEN CONSECUTIVE SWAPS
+-----------------------------------------------------------------
+Time between consecutive `SWAPPED` events for the SAME introduction point. An
+introduction point is identified by its AUTH KEY, not by the relay fingerprint: the
+service keeps two descriptors at once, so the same relay can be two different
+introduction points with two different auth keys, rotating independently.
+Script: `rotation-interval-stats.py`.
+
+  pooled over all introduction points
+
+                          BEFORE (17 h)   BEFORE (70 min)   AFTER (73.5 min)
+    samples                      2098               143                162
+    min                           120 s             120 s              120 s
+    median                        120 s             120 s              120 s
+    max                           480 s             360 s              121 s
+    mean                        133.9 s           135.1 s            120.1 s
+
+  full distribution
+
+    BEFORE, 17 h        120 s : 1826      AFTER, 73.5 min     120 s : 145
+                        121 s :   71                          121 s :  17
+                        240 s :  162                          240 s :   0
+                        241 s :    3                          360 s :   0
+                        360 s :   27                          480 s :   0
+                        361 s :    3
+                        480 s :    6
+
+    201 of 2098 intervals (9.6%) were 2x, 3x or 4x the configured 120 s.
+    In the matched 70-minute BEFORE window it was 14 of 143 (9.8%).
+    In the AFTER run it is 0 of 162 (0%).
+
+  one introduction point, every swap, as it appears in the log
+
+    AFTER   auth key RmvgLZoj2Zy661bjyq1VChVO8+DrPfJFj/Li+cZf3Zw   relay $6A75236C
+            13:42:52  13:44:52  13:46:53  13:48:53  13:50:53  13:52:53  13:54:53
+            intervals: 120 121 120 120 120 120     min 120  median 120  max 121
+
+    AFTER   auth key QmzxYnXwCtweltbqciq4h7Hlki0Ty+jZ1St77+9F3sI   relay $D7F2E673
+            14:14:19  14:16:19  14:18:19  14:20:19  14:22:19  14:24:19  14:26:19
+            intervals: 120 120 120 120 120 120     min 120  median 120  max 120
+
+    BEFORE  auth key sKwNTkcPhH4SM62KwEQBnoq8c94ycdk4NQf6XiGKq10   relay $95C37B1A
+            20:54:17  20:58:17  21:00:17  21:02:17  21:04:17  21:06:17  21:08:17
+            intervals: 240 120 120 120 120 120     min 120  median 120  max 240
+
+    BEFORE  auth key S5vF8dXCYGnlzGD8sAlSTPQWbBlYoedgimXxXjpt61s   relay $95C37B1A
+            21:02:18  21:04:18  21:06:18  21:12:18  21:16:18
+            intervals: 120 120 360 240               min 120  median 180  max 360
+
+  The AFTER maximum of 121 s is the one-second granularity of the housekeeping event
+  that drives the rotation (it runs once per second, and the log timestamps have
+  one-second granularity), not a missed rebuild. There is no interval above it.
+
+
+6d. THE 6 REBUILDS STILL NOT COMPLETED IN THE AFTER RUN
+--------------------------------------------------------
+They are not lost to any timeout. They arrive in two groups of three, at 14:20:19 and
+at 14:52:17, and each group coincides to the millisecond with a descriptor rotation:
+
+  Sep 21 14:20:19.633 rotate_all_descriptors: Time to rotate our descriptors ...
+  Sep 21 14:20:19.633 circuit_mark_for_close_: Circuit 3757106797 (id: 250) ... hs_service.c:867  (close_intro_circuits)
+  Sep 21 14:20:19.657 circuit_mark_for_close_: Circuit 3574437380 (id: 258) ... hs_service.c:3939 (orig reason: 12)
+  Sep 21 14:20:19.661 circuit_mark_for_close_: Circuit 2899037000 (id: 257) ... hs_service.c:3939 (orig reason: 12)
+  Sep 21 14:20:19.666 circuit_mark_for_close_: Circuit 3674738716 (id: 259) ... hs_service.c:3939 (orig reason: 12)
+
+  reason 12 = END_CIRC_REASON_NOSUCHSERVICE, from the error path of
+  service_intro_circ_has_opened(): when the circuit finished building, the introduction
+  point it was replacing no longer existed, because rotate_all_descriptors() had just
+  retired the descriptor that held it. tor's own time-period rotation runs every 8
+  minutes on this test network.
+
+  A rebuild for an introduction point that has ceased to exist has nothing left to
+  rebuild. These are not a timing defect and nothing can be done about them: the correct
+  outcome is exactly what happened, the circuit is closed immediately. The same thing
+  accounts for 7 of the 411 losses in the BEFORE run (the three at 20:52:17, and four
+  more later) - the 7 that the timeout did NOT claim in 6b.
+
+  A side effect worth recording: each of those six circuits also emits
+    [warn] Unknown introduction point auth key on circuit N for service ...
+  from the same error path. That warning is not new (it fired 7 times in the BEFORE run,
+  for exactly the same 7 circuits) but it is now reached more often, because a
+  replacement circuit is no longer killed by the adaptive timeout before it can open.
+  Rate observed: 6 in 73 minutes, i.e. once per descriptor rotation per descriptor.
+
+
+6e. NO INTRODUCTION POINT WAS RETIRED BY THE ROTATION; THE AUTH KEY NEVER CHANGED
+----------------------------------------------------------------------------------
+  auth keys seen in the AFTER run                               33
+  auth keys bound to more than one introduction relay            0
+      -> every auth key kept the same introduction relay for its whole life, so no
+         rotation ever moved an introduction point.
+
+  Within one rotation, START, ESTABLISHED and SWAPPED all print the same auth key, and
+  SWAPPED says so explicitly:
+      "... Auth key is still QmzxYnXwCtweltbqciq4h7Hlki0Ty+jZ1St77+9F3sI, so the
+       descriptor is unchanged."
+
+  How deep rotation got per introduction point, AFTER run:
+      rotation #1  x33    rotation #5  x27
+      rotation #2  x30    rotation #6  x24
+      rotation #3  x30    rotation #7  x24
+      rotation #4  x27    rotation #8  x6
+  MAX_INTRO_POINT_CIRCUIT_RETRIES is 3. Rotation depth reached 8 with no introduction
+  point retired for it, which is the retry-cap defence still holding (see the commit
+  message of 01213d78f and evidence 2).
+
+  `should_remove_intro_point: ... Removing it.` in the AFTER info log:  1 occurrence
+      Sep 21 14:20:23.646  Intro point $D7F2E673... (retried: 4 times). Removing it.
+  That is four seconds AFTER the 14:20:19 descriptor rotation, and it is not one of the
+  introduction points being rotated: the auth key QmzxYnXw... on that same relay kept
+  swapping at 14:22:19, 14:24:19 and 14:26:19, straight through. It is one of the three
+  intro points freshly picked for the new descriptor whose first circuit did not come
+  up, which tor then replaces - ordinary upstream behaviour. The same event occurred 4
+  times in the 17-hour BEFORE run.
+
+  Introduction point continuity in the AFTER run: the longest-lived auth keys swapped 7
+  times in a row at a strict 120 s, and an auth key stops appearing only when tor's own
+  8-minute time-period rotation retires the descriptor that held it. The first swap of a
+  freshly picked introduction point is about 2 minutes after it establishes, which is
+  why 195 rather than 216 swaps fit into 36 periods x 6 introduction points.
+
+
+6f. MAKE BEFORE BREAK IS UNCHANGED
+------------------------------------
+The service still never closes the live circuit. Evidence 5 showed the introduction
+relay does it, as a consequence of the duplicate-token kill when the replacement claims
+the auth key; that is why most SWAPPED lines say "the previous circuit was already
+gone". In the AFTER run 184 of the 195 SWAPPED lines say that and 11 say "old circuit
+N is closed" - the same split as the BEFORE run (2341 and 147 of 2488). No SWAPPED line
+in either run says "NOT closed (unexpected)". The only circuit this change ever closes is a
+REPLACEMENT that missed our own deadline (`ABANDONED`, 0 occurrences in this run) or one
+whose introduction point disappeared (6d).
+
+
+6g. WHAT WAS NOT EXERCISED
+----------------------------
+  ABANDONED : 0. With the adaptive timeout out of the way, every replacement on this
+              network established in about 25 ms, far inside the 60-second deadline
+              (half of 120, clamped to [30, 120]). The abandon path is therefore
+              present and reachable in code but was not exercised by this run.
+  FAILED    : 0. No replacement circuit died on its own before establishing.
+  BACKOFF   : 0. It takes 3 consecutive failures on one introduction point to arm it,
+              and there were no consecutive failures at all.
+  The immediate-retry behaviour was likewise not observed in action, for the same
+  reason: there was nothing to retry.
+
+  So this run demonstrates change 1 (the exemption) directly and quantitatively. It
+  demonstrates that changes 2 and 3 do not fire when nothing goes wrong, which is what
+  they should do, but it does not demonstrate them firing. Making them fire would need
+  a network that can stall a circuit build for tens of seconds, which this one cannot.
+
+
+HOW TO RE-DERIVE EVERYTHING ABOVE
+-----------------------------------
+  cd rotation-evidence
+  gunzip -c logs/notice.log.period-BEFORE.gz > /tmp/before.log
+  python3 rotation-interval-stats.py /tmp/before.log "BEFORE full"
+  python3 rotation-interval-stats.py /tmp/before.log "BEFORE 70min" \
+          2026-09-20T20:21:00 2026-09-20T21:31:00
+  python3 rotation-interval-stats.py logs/notice.log.period-AFTER "AFTER"
+
+  gunzip -c logs/info.log.period-AFTER.relevant-lines.txt.gz > /tmp/after-info.log
+  python3 rotation-timeout-correlate.py /tmp/after-info.log
+
+  # attempted vs completed, either log
+  grep -c "intro-rotation\] START"   <log>
+  grep -c "intro-rotation\] SWAPPED" <log>
