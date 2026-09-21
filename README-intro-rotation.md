@@ -69,10 +69,23 @@ limit, so the repurpose branch excludes rotation circuits.
 The scheduler, `run_intro_circuit_rotation()`, runs from
 `run_housekeeping_event()` once per second per service, after the Introduction
 Point maps have settled. It rebuilds the path of any Introduction Point whose
-circuit has been established for at least the configured interval, allows one
-replacement in flight per Introduction Point, and abandons a replacement that
-has not established within 120 seconds, retrying on the next cycle. Single onion
-services have no internal path and are excluded.
+circuit has been established for at least the configured interval, and allows
+one replacement in flight per Introduction Point. Single onion services have no
+internal path and are excluded.
+
+So that the period follows the configured value and nothing else, a replacement
+circuit is exempt from Tor's adaptive circuit-build timeout, in both places that
+can convert a building circuit into a measurement-only one
+(`circuit_expire_building()` and `circuit_build_times_handle_completed_hop()`).
+The exemption is keyed on the `is_intro_rotation` flag, which is only ever set
+when the option is enabled, and on the service-side establish-intro purpose, so
+no other circuit is affected and the timeout is still learned as usual. The
+service applies its own bound instead: a replacement that has not answered
+`INTRO_ESTABLISHED` within half the configured interval, clamped to 30-120
+seconds, is abandoned and closed, and a new attempt starts on the next
+housekeeping tick one second later rather than a whole interval later. Three
+consecutive failures on one Introduction Point fall back to one attempt per
+interval, so this cannot spin.
 
 ---
 
@@ -109,7 +122,9 @@ Every rebuild is logged at notice level with the prefix `[intro-rotation]`:
 | `BUILDING` | the replacement circuit and its four-hop path |
 | `ESTABLISHED` | `INTRO_ESTABLISHED` arrived on the replacement |
 | `SWAPPED` | the replacement now serves the Introduction Point |
-| `... did not establish within 120 seconds` | replacement abandoned; the old circuit keeps serving |
+| `ABANDONED` | the replacement missed the deadline (half the interval, clamped to 30-120 s); it is closed, the old circuit keeps serving, a new attempt starts on the next tick |
+| `FAILED` | the replacement died before establishing; same handling |
+| `BACKOFF` | three consecutive failed attempts on one Introduction Point; wait one full interval before trying again |
 
 The auth key printed in `START`, `ESTABLISHED` and `SWAPPED` is identical, which
 shows from the log alone that the published identity did not change while the
@@ -294,11 +309,17 @@ describing each file and the commands that re-derive the numbers.
   to the guard and the Introduction Point, the intermediate hops are drawn from
   roughly three candidates. The circuit is genuinely rebuilt each time; what the
   small network cannot demonstrate is the unlinkability of successive paths.
-* **Some rebuilds do not complete.** A replacement that exceeds Tor's adaptive
-  circuit-build timeout is converted into a build-time measurement circuit and
-  closed. The old circuit continues to serve and the next cycle retries, so the
-  service is never interrupted, but the effective interval is occasionally
-  longer than configured.
+* **A rebuild can still be dropped when its Introduction Point disappears.**
+  When Tor's own time-period rotation retires a descriptor, any replacement in
+  flight for one of that descriptor's Introduction Points has nothing left to
+  replace and is closed. Measured at 6 occurrences in 73 minutes on the test
+  network, whose descriptor rotates every 8 minutes; three per descriptor
+  rotation. This does not lengthen any Introduction Point's rotation interval,
+  because the Introduction Point itself is gone.
+  The adaptive-circuit-build-timeout loss that this section previously
+  described has been fixed and re-measured: rebuilds lost fell from 14.2% to
+  3.0%, and the maximum interval between consecutive swaps from 480 s to 121 s
+  with 120 s configured. See `rotation-evidence/06-rotation-period.txt`.
 * **Scope.** The modification was exercised on a private five-relay network with
   a single service and a 120-second interval. It has not been evaluated on the
   public network, with vanguards enabled, with client authorization, or with
