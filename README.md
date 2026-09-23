@@ -205,19 +205,23 @@ pip3 install matplotlib requests
 ### Dataset and evaluation tables/figures
 
 The raw measurements of the nine end-to-end experiments are released in
-`produce_graphs/repro/data/` (per-iteration intersection sizes for every run and
-stage, plus per-stage relay metadata). The toolkit in `produce_graphs/repro/`
+`produce_graphs/repro/data/`: the intersection size after every iteration of
+every run and stage, and per stage the run label (day, UTC time) and the
+monitored relay's consensus weight. The toolkit in `produce_graphs/repro/`
 regenerates from them every data-derived table and figure of the paper (the
 end-to-end cost table, the within-stage convergence table, the appendix table
-with all 36 run/stage rows, and the convergence figures) and recomputes every
-number stated in the evaluation:
+with all 36 run/stage rows, and the convergence figures):
 
 ```
 cd produce_graphs/repro
-make tables                              # tables -> out/tables/, figures -> out/figures/
-PAPER_ROOT=/path/to/paper make verify    # check every printed number against the paper sources
+make tables          # tables -> out/tables/, figures -> out/figures/
+make verify          # recompute every number stated in the evaluation
 ```
 
+`make verify` compares the recomputed values with the paper text when the
+LaTeX sources are available (`PAPER_ROOT=/path/to/paper make verify`); without
+them it prints the recomputed values only. The result of that comparison for
+the submitted version is committed as `produce_graphs/repro/out/verify_report.md`.
 See `produce_graphs/repro/README.md` for the data format and the list of checks.
 
 ---
