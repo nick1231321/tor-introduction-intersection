@@ -1,7 +1,8 @@
 """Checks for the appendix run/stage table (tab:run-stage-thresholds).
 
 Covers sections/appendix_results.tex lines 16-17 and 26-77: the column
-definitions (app-001) and the 36 per-run/per-stage rows (app-002..app-037).
+definitions (app-001), the 36 per-run/per-stage rows (app-002..app-037) and
+the whole tabular body against generate.py's output (app-body).
 
 The "paper" side of every row claim is PARSED FROM THE CURRENT .tex LINE
 (not from a transcription): each row is split on '&', the IP row's
@@ -12,13 +13,14 @@ The TABLE dict below is kept only as a secondary guard: if the parsed row
 differs from it (or fails to parse), the claim FAILs with a
 "transcription stale" note so a silent edit of the .tex cannot pass.
 
-The "computed" side comes from run_stage_metrics.csv MET[(p+3, s)] and every
-T column plus |A_1| is independently recomputed from the raw trajectory
-TRAJ[(p+3, s)] (T<=q = min t with |I_t| <= q; |A_1| = |I_1|).  The IP row's
-day label and start time are DERIVED FROM started_at_utc (Day N = 1 + days
-since the earliest IP start over all runs; HH:MM = the timestamp's hour and
-minute) and must also agree with the pre-labelled day_label /
-experiment_time_utc columns.
+The "computed" side: every T column plus |A_1| is recomputed from the raw
+trajectory TRAJ[(p+3, s)] (T<=q = min t with |I_t| <= q; |A_1| = |I_1|;
+T_conv = T<=1) and CW comes from run_stage_metrics.csv MET[(p+3, s)]
+consensus_weight.  The IP row's day label and start time come from the IP
+row's day_label / experiment_time_utc columns of MET (a stage's own row gives
+that stage's start day and time; the run is labelled by its IP-stage start).
+The released metrics file carries no precomputed convergence columns, so the
+trajectory-derived values are the only source for the T columns.
 
 Every printed value is compared as an exact integer (the table prints
 integers), except Day/time which are compared as strings.
@@ -26,11 +28,13 @@ integers), except Day/time which are compared as strings.
 from __future__ import annotations
 
 import re
-from datetime import date
+import sys
+from pathlib import Path
 
 import core as _core   # shared tex helpers (single copy in core.py)
 
 FILE = "sections/appendix_results.tex"
+TABLE_LABEL = r"\label{tab:run-stage-thresholds}"
 STAGE_LABEL = {"IP": "Intro. Point", "M1": "Middle 1",
                "VG": "Vanguard", "EG": "Entry Guard"}
 QS = [10, 5, 3, 2]
@@ -92,40 +96,28 @@ def _fmt_cw(x: str) -> int:
 
 
 def _hhmm_label(row: dict) -> str:
-    """'HH:MM' from the pre-labelled experiment_time_utc column ('HH:MM UTC')."""
+    """'HH:MM' from the experiment_time_utc column ('HH:MM UTC'; minute resolution)."""
     t = (row.get("experiment_time_utc") or "").strip()
     return t.split()[0][:5] if t else ""
 
 
-def _start_date(row: dict) -> date:
-    return date.fromisoformat(row["started_at_utc"][:10])
+def _day_label(row: dict) -> str:
+    return (row.get("day_label") or "").strip()
 
 
-def _derived_day_time(C, metrics, rid: int):
-    """(Day label, HH:MM) derived purely from started_at_utc of the IP stage.
-
-    Day 1 is the calendar date (UTC) of the earliest IP start over all runs.
-    All IP starts are within a few seconds of the hour, so HH:MM truncation
-    of the timestamp is exact.
-    """
-    d0 = min(_start_date(metrics[(r, "IP")]) for r in C.RUN_IDS)
+def _run_day_time(metrics, rid: int):
+    """(Day label, HH:MM) of run `rid` = day_label / experiment_time_utc of its
+    IP-stage row (the run is labelled by the start of its first stage)."""
     m = metrics[(rid, "IP")]
-    day = f"Day {(_start_date(m) - d0).days + 1}"
-    hhmm = m["started_at_utc"][11:16]
-    return day, hhmm
+    return _day_label(m), _hhmm_label(m)
 
 
 def _computed_row(C, traj, metrics, rid: int, s: str):
-    """Return (values from MET, values recomputed from TRAJ, cross-check ok?)."""
-    m = metrics[(rid, s)]
+    """The seven integer cells of a printed row: |A_1|, T<=10, T<=5, T<=3,
+    T<=2 and T_conv from the trajectory, CW from the metrics row."""
     seq = traj[(rid, s)]
-    met = [int(m["initial_intersection_size"])] + \
-          [int(m[f"T_le_{q}"]) for q in QS] + \
-          [int(m["trials_to_convergence"]), _fmt_cw(m["consensus_weight"])]
-    trj = [C.initial_set_size(seq)] + [C.T_le(seq, q) for q in QS] + [C.T_conv(seq)]
-    # CW is not derivable from the trajectory; compare the first 6 entries only
-    xcheck = met[:6] == trj and int(m["T_le_1"]) == trj[5]
-    return met, trj, xcheck
+    return ([C.initial_set_size(seq)] + [C.T_le(seq, q) for q in QS] +
+            [C.T_conv(seq), _fmt_cw(metrics[(rid, s)]["consensus_weight"])])
 
 
 def _tex_lines() -> list[str] | None:
@@ -175,30 +167,35 @@ def _parse_row(quote: str, p: int, s: str):
     return day, hhmm, nums
 
 
+def _table_body(lines):
+    """(first line no, active body lines) of tab:run-stage-thresholds: the
+    non-blank lines strictly between the header's \\midrule and \\bottomrule,
+    or (None, None) if the table cannot be located."""
+    if lines is None:
+        return None, None
+    lab = next((i for i, l in enumerate(lines, 1) if TABLE_LABEL in l), None)
+    if lab is None:
+        return None, None
+    mid = next((i for i in range(lab, len(lines) + 1) if lines[i - 1].strip().startswith(r"\midrule")), None)
+    bot = next((i for i in range(lab, len(lines) + 1) if lines[i - 1].strip().startswith(r"\bottomrule")), None)
+    if mid is None or bot is None or bot <= mid:
+        return None, None
+    body = [lines[i - 1].strip() for i in range(mid + 1, bot) if lines[i - 1].strip()]
+    return mid + 1, body
+
+
+def _generate():
+    """Import the generator (it loads the data itself; figures are not drawn)."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    import generate  # noqa: E402
+    return generate
+
+
 def claims(C, traj, metrics) -> list[dict]:
     out = []
     lines = _tex_lines()
 
-    # ---- app-001: column definitions / consistency of MET with TRAJ over all 36 rows
-    n_ok = 0
-    mism = []
-    for rid in C.RUN_IDS:
-        for s in C.STAGES:
-            m = metrics[(rid, s)]
-            seq = traj[(rid, s)]
-            ok = True
-            for q in C.THRESHOLDS:            # 10,5,3,2,1
-                if C.T_le(seq, q) != int(m[f"T_le_{q}"]):
-                    ok = False
-            if C.T_conv(seq) != int(m["trials_to_convergence"]) or \
-               int(m["T_le_1"]) != int(m["trials_to_convergence"]):
-                ok = False
-            if C.initial_set_size(seq) != int(m["initial_intersection_size"]):
-                ok = False
-            n_ok += ok
-            if not ok:
-                mism.append(f"R{C.PAPER_RUN[rid]}/{s}")
-    # the definitions must still be printed on lines 16-17 of the current .tex
+    # ---- app-001: column definitions still printed on lines 16-17
     def_ok = True
     def_note = ""
     q16, q17 = _quote(lines, 16), _quote(lines, 17)
@@ -211,9 +208,10 @@ def claims(C, traj, metrics) -> list[dict]:
             def_ok = False
             def_note = ("definition text stale: line(s) " + ", ".join(missing) +
                         " no longer contain the expected T<=q / Tconv definitions")
+    n_rows = sum(1 for rid in C.RUN_IDS for s in C.STAGES if (rid, s) in traj and (rid, s) in metrics)
     if lines is None:
         status = "UNVERIFIABLE"
-    elif def_ok and n_ok == 36:
+    elif def_ok and n_rows == 36:
         status = "PASS"
     else:
         status = "FAIL"
@@ -222,15 +220,14 @@ def claims(C, traj, metrics) -> list[dict]:
         "location": f"{FILE}:16-17",
         "quote": (q16 + " " + q17).strip() or r"$T_{\leq q}=\min\{t:|\mathcal{I}_t|\leq q\}$;",
         "paper": "T<=q = min t with |I_t|<=q; Tconv = min t with |I_t|=1; 36 rows",
-        "computed": f"{n_ok}/36 run-stage rows: TRAJ-derived T<=q (q in 10,5,3,2,1), "
-                    f"Tconv and |A_1| equal MET columns"
-                    + (f"; mismatches: {', '.join(mism)}" if mism else "")
+        "computed": f"{n_rows}/36 run-stage rows available in TRAJ and MET; T<=q (q in 10,5,3,2), "
+                    f"Tconv = T<=1 and |A_1| = |I_1| derived from TRAJ for each"
                     + f"; definitions on lines 16-17 {'present' if def_ok else 'MISSING'}",
         "status": status,
         "note": "Definitional check: asserts lines 16-17 of the current .tex still carry "
-                "the T<=q and Tconv definitions, then recomputes every threshold column "
-                "from the raw trajectories and asserts agreement with run_stage_metrics.csv "
-                "(T_le_q, trials_to_convergence == T_le_1, initial_intersection_size)."
+                "the T<=q and Tconv definitions and that every one of the 36 (run, stage) "
+                "pairs has a trajectory and a metrics row; the per-row values are checked "
+                "by app-002..app-037 and the whole body by app-body."
                 + (f" {def_note}" if def_note else ""),
     })
 
@@ -241,8 +238,7 @@ def claims(C, traj, metrics) -> list[dict]:
         for s in C.STAGES:
             line, g_day, g_hhmm, *g_nums = TABLE[(p, s)]
             quote = _quote(lines, line)
-            met, trj, xcheck = _computed_row(C, traj, metrics, rid, s)
-            m = metrics[(rid, s)]
+            comp = _computed_row(C, traj, metrics, rid, s)
             comp_parts = []
             note_parts = []
             status = "PASS"
@@ -276,31 +272,20 @@ def claims(C, traj, metrics) -> list[dict]:
 
             # -- computed side
             if s == "IP":
-                comp_day, comp_time = _derived_day_time(C, metrics, rid)
-                lab_day = m["day_label"].strip()
-                lab_time = _hhmm_label(m)
-                comp_parts.append(f"{comp_day} {comp_time} (from started_at_utc="
-                                  f"{m['started_at_utc']}; labels: {lab_day} {lab_time})")
-                if comp_day != lab_day or comp_time != lab_time:
-                    if status != "UNVERIFIABLE":
-                        status = "FAIL"
-                    note_parts.append(f"started_at_utc-derived '{comp_day} {comp_time}' "
-                                      f"disagrees with label columns '{lab_day} {lab_time}'")
+                comp_day, comp_time = _run_day_time(metrics, rid)
+                comp_parts.append(f"{comp_day} {comp_time} (IP row day_label / experiment_time_utc)")
                 if parse_err is None and (comp_day != day or comp_time != hhmm):
                     status = "FAIL"
                     note_parts.append(f"Day/time: paper '{day} {hhmm}' vs computed "
                                       f"'{comp_day} {comp_time}'")
-            comp_parts += [str(v) for v in met]
+            comp_parts += [str(v) for v in comp]
 
-            note_parts.append(f"MET ({rid},{s}) vs printed row parsed from {FILE}:{line}; "
-                              f"T columns and |A_1| cross-checked on TRAJ: "
-                              f"{'agree' if xcheck else 'DISAGREE ' + str(trj)}")
-            if not xcheck and status != "UNVERIFIABLE":
-                status = "FAIL"
-            if parse_err is None and met != paper_nums:
+            note_parts.append(f"printed row parsed from {FILE}:{line}; |A_1| and T columns "
+                              f"derived from TRAJ ({rid},{s}), CW from MET")
+            if parse_err is None and comp != paper_nums:
                 status = "FAIL"
                 diffs = [f"{name}: paper {pv} vs computed {cv}"
-                         for name, pv, cv in zip(COLS, paper_nums, met) if pv != cv]
+                         for name, pv, cv in zip(COLS, paper_nums, comp) if pv != cv]
                 note_parts.append("; ".join(diffs))
 
             out.append({
@@ -313,4 +298,32 @@ def claims(C, traj, metrics) -> list[dict]:
                 "note": "; ".join(note_parts),
             })
             cid += 1
+
+    # ---- app-body: the whole tabular body equals generate.py's output (modulo whitespace)
+    body_line, body = _table_body(lines)
+    if body is None:
+        out.append({"id": "app-body", "location": f"{FILE}:?", "quote": TABLE_LABEL,
+                    "paper": "n/a", "computed": "n/a", "status": "UNVERIFIABLE",
+                    "note": ("could not read the .tex file" if lines is None else
+                             "tab:run-stage-thresholds body (\\midrule .. \\bottomrule) not found")})
+        return out
+    gen = _generate()
+    gen_body = [l.strip() for l in gen.thresholds_body(traj, metrics).splitlines() if l.strip()]
+    norm_tex = [_core.norm_ws(l) for l in body]
+    norm_gen = [_core.norm_ws(l) for l in gen_body]
+    diffs = [f"body line {i + 1}: tex {a!r} vs generate.py {b!r}"
+             for i, (a, b) in enumerate(zip(norm_tex, norm_gen)) if a != b]
+    if len(norm_tex) != len(norm_gen):
+        diffs.append(f"{len(norm_tex)} tex body lines vs {len(norm_gen)} generated")
+    same = not diffs
+    out.append({"id": "app-body", "location": f"{FILE}:{body_line}", "quote": TABLE_LABEL,
+                "paper": f"{len(body)} body lines",
+                "computed": f"{len(gen_body)} body lines from generate.py",
+                "status": "PASS" if same else "FAIL",
+                "note": ("tabular body of tab:run-stage-thresholds equals "
+                         "repro/out/tables/run_stage_thresholds_body.tex (make tables) modulo whitespace"
+                         if same else
+                         "tabular body differs from generate.py output; run `make tables` and paste "
+                         "out/tables/run_stage_thresholds_body.tex into the table. "
+                         + "; ".join(diffs[:6]))})
     return out

@@ -2,8 +2,8 @@
 
 Per paper run p (raw run r = p + 3), every row is recomputed from the raw data:
   * stage cells  : T_conv per stage (IP, M1, VG, EG) taken from the trajectory
-                   (== metrics.trials_to_convergence, cross-checked) with the
-                   consensus weight from metrics in parentheses;
+                   (core.T_conv; it must equal the recorded trial count) with
+                   the consensus weight from metrics in parentheses;
   * N            : sum of the four T_conv values;
   * v=0          : h = 31*N/3600 hours, printed at 2 decimals;
   * v=1 h        : h + 4  (rounded from the UNROUNDED h);
@@ -96,12 +96,10 @@ def claims(C, traj, metrics):
         per_run[rid] = (tconv, N, h)
         computed = _fmt_row(C, tconv, cw, N, h)
         notes = []
-        # cross-check: trajectory-derived T_conv == metrics.trials_to_convergence == len(seq)
+        # consistency: trajectory-derived T_conv == number of recorded trials
         for s in C.STAGES:
-            m = int(metrics[(rid, s)]["trials_to_convergence"])
-            if m != tconv[s] or len(traj[(rid, s)]) != tconv[s]:
-                notes.append(f"{s}: metrics T_conv={m}, trajectory T_conv={tconv[s]}, "
-                             f"len(seq)={len(traj[(rid, s)])}")
+            if len(traj[(rid, s)]) != tconv[s]:
+                notes.append(f"{s}: trajectory T_conv={tconv[s]}, len(seq)={len(traj[(rid, s)])}")
         status = "PASS" if computed == paper and not notes else "FAIL"
         note = (f"raw run {rid}; h={h} = {float(h):.6f} exact; v=1h/v=4h/v_max computed "
                 f"exactly on rationals, then ROUND_HALF_UP to 2 dp.")

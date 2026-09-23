@@ -11,7 +11,7 @@ compares it with the paper text.
 | file | contents |
 |---|---|
 | `trajectories_every_trial.csv` | `run_id,stage,trial,intersection_size` — the size of the running intersection after every iteration of every stage. Raw `run_id` 4..12 are paper runs 1..9; `stage` is `IP` (Introduction Point), `M1` (middle), `VG` (layer-2 vanguard), `EG` (entry guard). |
-| `run_stage_metrics.csv` | one row per run and stage: stage start time (UTC), day/time label, the monitored relay's consensus weight and guard/middle selection probability (Onionoo), its read/write bandwidth, and the precomputed `T_le_q` / `trials_to_convergence` / `initial_intersection_size` columns, which `verify.py` cross-checks against the trajectories. |
+| `run_stage_metrics.csv` | `run_id,stage_code,experiment_date,day_label,experiment_time_utc,consensus_weight` — one row per run and stage: the stage's start day (`experiment_date`, YYYY-MM-DD; `day_label` = "Day N" with Day 1 = 7 January 2026) and start time (`experiment_time_utc`, "HH:MM UTC", minute resolution) and the monitored relay's stage-start consensus weight. A run is labelled by its `IP` row. The file carries no precomputed convergence columns: every `T_le_q`, `T_conv` and initial-set size is derived from the trajectories by `core.py`. |
 
 Only aggregate values were ever written to disk during the experiments (see the
 paper's ethics section): no addresses, pseudonyms or packet data exist in this
@@ -54,7 +54,9 @@ to compute them once those inputs are available.
 - `core.py` — data loading, statistics (`T_le`, `T_conv`, hours) and the shared
   LaTeX helpers (comment-stripped `tex_lines`, `find_quote`, ...).
 - `generate.py` — table bodies and figures.
-- `verify.py` — data-integrity check, discovery of `checks/*.py`, report.
+- `verify.py` — data-integrity check (both CSVs cover the same 36 run/stage
+  pairs; the metrics file carries no precomputed columns to compare), discovery
+  of `checks/*.py`, report.
 - `checks/` — one module per section or table of the paper; each exposes
   `claims(C, traj, metrics)` returning `{id, location, quote, paper, computed,
   status, note}` records.
@@ -66,13 +68,3 @@ Add a record to the module for that section (or a new `checks/<name>.py`; it is
 discovered automatically). Recompute the value from `traj` / `metrics`; parse
 the printed value from the `.tex` with `C.find_quote` so that an edited sentence
 is re-checked rather than silently matched. Run `make verify`.
-
-## Known data caveat
-
-`run_stage_metrics.csv` records one start timestamp per stage. For paper run 7
-the vanguard stage spans 529 s between its start and the next stage's start,
-which is shorter than 24 iterations at δ = 30 s can take; the timestamp was
-written after a clock discontinuity on the relay and is unreliable. No number
-in the paper is derived from stage start times (they only label the runs by
-start day and hour), and `verify.py` reports the inconsistency under
-`const-035` rather than hiding it.

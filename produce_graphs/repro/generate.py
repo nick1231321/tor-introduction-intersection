@@ -36,20 +36,6 @@ def w(name, text):
     print("wrote", OUT_T / name)
 
 
-# ---------- Table: stage_context (with SD) ----------
-def table_stage_context():
-    lines = []
-    for s in C.STAGES:
-        row = next(metrics[(rid, s)] for rid in C.RUN_IDS)  # any run for CW/Read/Write medians
-        cw = int(st.median([int(metrics[(rid, s)]["consensus_weight"]) for rid in C.RUN_IDS]))
-        rd = st.median([float(metrics[(rid, s)]["read_Mbps"]) for rid in C.RUN_IDS])
-        wr = st.median([float(metrics[(rid, s)]["write_Mbps"]) for rid in C.RUN_IDS])
-        tc = [C.T_conv(traj[(rid, s)]) for rid in C.RUN_IDS]
-        lines.append(f"{C.STAGE_NAME[s]:12s} & {cw} & {rd:.2f} & {wr:.2f} & "
-                     f"{int(st.median(tc))} & {st.stdev(tc):.1f} \\\\")
-    w("stage_context_body.tex", "\n".join(lines) + "\n")
-
-
 # ---------- Table: end_to_end ----------
 def table_end_to_end():
     lines = []
@@ -73,23 +59,36 @@ def table_end_to_end():
     w("end_to_end_body.tex", "\n".join(lines) + "\n")
 
 
-# ---------- Table: run_stage_thresholds (all 36 rows) ----------
-def table_thresholds():
-    lines = []
+# ---------- Table: run_stage_thresholds (tab:run-stage-thresholds, all 36 rows) ----------
+THRESHOLD_STAGE_LABEL = {"IP": "Intro. Point", "M1": "Middle 1",
+                         "VG": "Vanguard", "EG": "Entry Guard"}
+THRESHOLD_QS = (10, 5, 3, 2, 1)          # T<=10, T<=5, T<=3, T<=2, T_conv
+
+
+def thresholds_body(traj, metrics):
+    """The tabular body of tab:run-stage-thresholds in the paper's exact layout:
+    per run four stage rows 'label  & stage  & |A_1|  & T<=10  & T<=5  & T<=3
+    & T<=2  & T_conv  & CW \\\\' (two spaces before every '&'; the label
+    'Rp (Day d, HH:MM)' only on the IP row, taken from that run's IP-stage
+    day_label / experiment_time_utc), runs separated by '\\addlinespace' and a
+    blank line."""
+    blocks = []
     for rid in C.RUN_IDS:
+        ip = metrics[(rid, "IP")]
+        label = f"R{C.PAPER_RUN[rid]} ({ip['day_label']}, {ip['experiment_time_utc'].replace(' UTC', '')})"
+        rows = []
         for j, s in enumerate(C.STAGES):
             seq = traj[(rid, s)]
-            m = metrics[(rid, s)]
-            tl = [C.T_le(seq, q) for q in (10, 5, 3, 2, 1)]
-            rd = f"{float(m['read_bytes_per_second'])/1000:.1f}k"
-            wr = f"{float(m['write_bytes_per_second'])/1000:.1f}k"
-            head = (f"R{C.PAPER_RUN[rid]} ({m['day_label']}, {m['experiment_time_utc'].replace(' UTC','')})"
-                    if j == 0 else "")
-            lines.append(f"{head} & {C.STAGE_NAME[s]} & {C.initial_set_size(seq)} & "
-                         + " & ".join(str(x) for x in tl)
-                         + f" & {m['consensus_weight']} & {rd} & {wr} \\\\")
-        lines.append("\\addlinespace")
-    w("run_stage_thresholds_body.tex", "\n".join(lines) + "\n")
+            cells = [label if j == 0 else "", THRESHOLD_STAGE_LABEL[s], str(C.initial_set_size(seq))]
+            cells += [str(C.T_le(seq, q)) for q in THRESHOLD_QS]
+            cells.append(str(int(round(float(metrics[(rid, s)]["consensus_weight"])))))
+            rows.append("  & ".join(cells) + " \\\\")
+        blocks.append("\n".join(rows))
+    return "\n\\addlinespace\n\n".join(blocks) + "\n"
+
+
+def table_thresholds():
+    w("run_stage_thresholds_body.tex", thresholds_body(traj, metrics))
 
 
 # ---------- Table: stage_contrasts (tab:stage-contrasts, two column groups) ----------
@@ -181,7 +180,6 @@ def figs_runs_grid():
 
 
 if __name__ == "__main__":
-    table_stage_context()
     table_end_to_end()
     table_thresholds()
     table_stage_contrasts()

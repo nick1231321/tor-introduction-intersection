@@ -34,7 +34,7 @@ from __future__ import annotations
 import re
 from datetime import date, datetime
 
-import core as _core   # shared tex/timestamp helpers (single copy in core.py)
+import core as _core   # shared tex helpers (single copy in core.py)
 
 LAT_TEX = "sections/appendix_time_of_introduction_handshake_completion.tex"
 REL_TEX = "sections/appendix_relay_concentration.tex"
@@ -134,16 +134,16 @@ def _parse_latency_table(clean):
 
 
 def _experiment_start(metrics):
-    """Earliest started_at_utc across all run/stage rows (datetime)."""
-    ts = []
+    """Earliest experiment_date (YYYY-MM-DD) across all run/stage rows (date)."""
+    ds = []
     for row in metrics.values():
-        v = row.get("started_at_utc")
+        v = (row.get("experiment_date") or "").strip()
         if v:
             try:
-                ts.append(_core.parse_utc(v))
+                ds.append(date.fromisoformat(v[:10]))
             except ValueError:
                 pass
-    return min(ts) if ts else None
+    return min(ds) if ds else None
 
 
 def _parse_date(v):
@@ -213,8 +213,7 @@ def claims(C, traj, metrics) -> list[dict]:
     out = []
 
     # ---- ext-001: relay ages ------------------------------------------------
-    t0 = _experiment_start(metrics)
-    t0d = t0.date() if t0 else None
+    t0d = _experiment_start(metrics)
     t0s = t0d.isoformat() if t0d else "unknown"
     age_paper = f"{m_age.group(1)}--{m_age.group(2)}" if m_age else "not found in tex"
     first_seen_vals = sorted({(r.get("first_seen") or "").strip()
@@ -231,13 +230,13 @@ def claims(C, traj, metrics) -> list[dict]:
         status = ("PASS" if (amin == int(m_age.group(1)) and amax == int(m_age.group(2)))
                   else "FAIL")
         note = ("Computed from a first_seen column found in run_stage_metrics.csv: "
-                "(min(started_at_utc).date() - first_seen).days per relay.")
+                "(min(experiment_date) - first_seen).days per relay.")
     else:
         computed = "n/a (no relay first_seen in metrics)"
         status = "UNVERIFIABLE"
         note = (f"Needs Onionoo first_seen for the four operated relays; recipe: "
                 f"({t0s} - first_seen).days for each relay, expect min/max = {age_paper}. "
-                f"Experiment start recovered from min(started_at_utc) = {t0s}. "
+                f"Experiment start = min(experiment_date) over run_stage_metrics.csv = {t0s}. "
                 f"run_stage_metrics.csv has no fingerprint/first_seen column.")
     out.append(dict(
         id="ext-001", location=_loc(SETUP_TEX, ln_age),
@@ -488,7 +487,9 @@ def claims(C, traj, metrics) -> list[dict]:
         quote="Approximately $75\\%$ of both the guard and the middle selection-probability mass",
         paper=pct_paper, computed="n/a (snapshot file absent)",
         status="UNVERIFIABLE",
-        note="Recipe: sum(guard_probability | 14-Eyes)/sum(guard_probability) and the same "
+        note="Recipe, on the Onionoo snapshot's per-relay guard_probability / "
+             "middle_probability (not part of the released dataset): "
+             "sum(guard_probability | country in 14-Eyes)/sum(guard_probability) and the same "
              f"for middle_probability; both ~{pct_paper} (figures/14_eyes_probabilities.png). "
              f"Textual: {pct_txt}."))
 

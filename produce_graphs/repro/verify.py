@@ -3,9 +3,14 @@
 
     python3 verify.py [--module NAME ...] [--full] [--out PATH]
 
-1. Data integrity: every precomputed column of generated/run_stage_metrics.csv
-   (T_le_q, trials_to_convergence, initial_intersection_size) must equal the
-   value recomputed from generated/trajectories_every_trial.csv.
+1. Data integrity: the two CSVs must describe the same 36 (run, stage) pairs.
+   The released run_stage_metrics.csv carries no precomputed convergence
+   columns (it holds run/stage labels and the consensus weight only); every
+   convergence quantity is derived from trajectories_every_trial.csv via
+   core.T_le / core.T_conv / core.initial_set_size. Should a precomputed
+   column (T_le_q, trials_to_convergence, initial_intersection_size,
+   n_recorded_iterations) ever be present, it is compared with the
+   trajectory-derived value; absent columns are skipped.
 2. Every module in checks/ (discovered with pkgutil) exposes
        claims(C, traj, metrics) -> [ {id, location, quote, paper, computed,
                                       status, note}, ... ]
@@ -41,8 +46,24 @@ INTEGRITY_COLS = [("T_le_10", 10), ("T_le_5", 5), ("T_le_3", 3), ("T_le_2", 2), 
 
 # --------------------------------------------------------------------------- data
 def integrity_check(traj, metrics):
-    """Mismatch strings between the metrics CSV and the raw trajectories."""
+    """Mismatch strings between the metrics CSV and the raw trajectories.
+
+    Both files must cover the same (run, stage) keys. Precomputed convergence
+    columns are compared only when the metrics file actually carries them; the
+    released file carries none, so with no such column present the result is
+    [] (every convergence quantity is trajectory-derived, nothing to compare).
+    """
     bad = []
+    present = set()
+    for row in metrics.values():
+        present.update(k for k, v in row.items() if k and str(v).strip() != "")
+    cols = {k: (lambda seq, q=q: C.T_le(seq, q)) for k, q in INTEGRITY_COLS if k in present}
+    if "trials_to_convergence" in present:
+        cols["trials_to_convergence"] = C.T_conv
+    if "initial_intersection_size" in present:
+        cols["initial_intersection_size"] = C.initial_set_size
+    if "n_recorded_iterations" in present:
+        cols["n_recorded_iterations"] = len
     for key in sorted(set(traj) | set(metrics)):
         rid, s = key
         if key not in traj:
@@ -52,13 +73,10 @@ def integrity_check(traj, metrics):
             bad.append(f"{rid}/{s}: trajectory but no metrics row")
             continue
         seq, row = traj[key], metrics[key]
-        want = {k: C.T_le(seq, q) for k, q in INTEGRITY_COLS}
-        want["trials_to_convergence"] = C.T_conv(seq)
-        want["initial_intersection_size"] = C.initial_set_size(seq)
-        want["n_recorded_iterations"] = len(seq)
-        for k, v in want.items():
+        for k, fn in cols.items():
             got = row.get(k, "")
             got = int(float(got)) if str(got).strip() != "" else None
+            v = fn(seq)
             if got != v:
                 bad.append(f"{rid}/{s} {k}: metrics={got} trajectory={v}")
     return bad
@@ -201,7 +219,9 @@ def render_report(rows, integ, full):
                   f"- computed: {_cell(r['computed'])}",
                   f"- note: {_cell(r['note'])}", ""]
     parts += ["## Data integrity (metrics CSV vs trajectories)", ""]
-    parts += ["- " + x for x in integ] if integ else ["all precomputed columns agree"]
+    parts += ["- " + x for x in integ] if integ else [
+        "both CSVs cover the same 36 (run, stage) pairs; the metrics file carries no "
+        "precomputed convergence columns (all such quantities are trajectory-derived)"]
     return "\n".join(parts) + "\n"
 
 

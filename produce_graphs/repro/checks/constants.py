@@ -5,10 +5,10 @@ These values are *reported* by the paper, not computed from the experiment
 data, so every claim carries status CONSTANT with its source in 'note'.
 Where the CSVs allow a structural cross-check (stage-code set, one trajectory
 row per trial with contiguous trial indices, IP being the first stage of
-every run, 36 run-stage rows, wall-clock seconds per iteration against the
-paper's own 31 s/iteration floor, the country list in the appendix, and
-consistency between restated constants) the module performs that check and
-downgrades the claim to FAIL if the cross-check contradicts the printed value.
+every run by (experiment_date, experiment_time_utc), 36 run-stage rows, the
+country list in the appendix, and consistency between restated constants) the
+module performs that check and downgrades the claim to FAIL if the cross-check
+contradicts the printed value.
 
 Every claim additionally verifies that its quoted text is actually printed
 at the stated location (lines loc-1..loc+1, whitespace-normalised); a quote
@@ -19,28 +19,15 @@ pointing at the wrong line.
 Nothing is hard-coded as a "computed" value except the constant itself,
 which by definition is the thing being reported.
 
-Pure Python + csv/statistics/math only.
+Pure Python + csv/re only.
 """
 from __future__ import annotations
 
 import csv
 import re
-import statistics as st
 from pathlib import Path
 
-import core as _core   # shared tex/timestamp helpers (single copy in core.py)
-
-# The paper's own per-iteration cost model: delta = 30 s slept BETWEEN
-# iterations + ~1 s handshake per iteration (implementation.tex: "sleeps
-# delta=30 s, and repeats"; 04-setup eq. cost: T = (31 s) N + 4 v).  N
-# iterations therefore need at least (N-1)*delta + N*handshake seconds.
-_PAPER_DELTA_S = 30.0
-_PAPER_HANDSHAKE_S = 1.0
-_ITER_FLOOR_S = _PAPER_DELTA_S + _PAPER_HANDSHAKE_S
-
-
-def _stage_floor_s(n: int) -> float:
-    return (n - 1) * _PAPER_DELTA_S + n * _PAPER_HANDSHAKE_S
+import core as _core   # shared tex helpers (single copy in core.py)
 
 # ----------------------------------------------------------------------------
 # helpers (thin wrappers over core.py so every module shares one implementation)
@@ -76,40 +63,18 @@ def _quote_at_location(C, loc: str, quote: str) -> bool:
     return _norm_ws(quote) in _norm_ws(" ".join(window))
 
 
-_parse_utc = _core.parse_utc
+def _stage_start(row) -> tuple[str, str]:
+    """(experiment_date 'YYYY-MM-DD', 'HH:MM') of a stage's own MET row; minute
+    resolution, sorts chronologically as a string pair."""
+    hhmm = (row.get("experiment_time_utc") or "").strip().split(" ")[0][:5]
+    return ((row.get("experiment_date") or "").strip(), hhmm)
 
 
 def _stage_order_by_start(metrics, rid, C):
-    """Stage codes of run `rid` sorted by started_at_utc (earliest first)."""
-    rows = [(_parse_utc(metrics[(rid, s)]["started_at_utc"]), s) for s in C.STAGES
-            if (rid, s) in metrics]
+    """Stage codes of run `rid` sorted by (experiment_date, HH:MM), earliest first."""
+    rows = [(_stage_start(metrics[(rid, s)]), s) for s in C.STAGES if (rid, s) in metrics]
     rows.sort()
     return [s for _, s in rows]
-
-
-def _seconds_per_iteration(metrics, C):
-    """Wall-clock seconds per iteration for each non-final stage of each run.
-
-    For each (run, stage) with a successor stage:
-        (started_at_utc(next stage) - started_at_utc(stage)) / trials_to_convergence
-    This is an *upper* bound on the per-iteration wall-clock cost (it also
-    includes the once-per-stage bring-up of the next stage), so under the
-    paper's model (delta = 30 s + ~1 s handshake) every value must be >= 31 s.
-    Returns a list of dicts {run, paper_run, stage, next, n, dt, spi}.
-    """
-    vals = []
-    for rid in C.RUN_IDS:
-        for a, b in zip(C.STAGES[:-1], C.STAGES[1:]):
-            ra, rb = metrics.get((rid, a)), metrics.get((rid, b))
-            if not ra or not rb:
-                continue
-            n = int(float(ra["trials_to_convergence"]))
-            if n <= 0:
-                continue
-            dt = (_parse_utc(rb["started_at_utc"]) - _parse_utc(ra["started_at_utc"])).total_seconds()
-            vals.append(dict(run=rid, paper_run=C.PAPER_RUN.get(rid, rid), stage=a, next=b,
-                             n=n, dt=dt, spi=dt / n))
-    return vals
 
 
 def _trial_contiguity(C) -> tuple[bool, int, int, list[str]]:
@@ -167,35 +132,17 @@ def claims(C, traj, metrics) -> list[dict]:
     first_stage = {rid: (_stage_order_by_start(metrics, rid, C) or [None])[0] for rid in C.RUN_IDS}
     all_ip_first = all(v == "IP" for v in first_stage.values())
 
-    spi_rows = _seconds_per_iteration(metrics, C)
-    spi = [r["spi"] for r in spi_rows]
-    below_floor = [r for r in spi_rows if r["dt"] < _stage_floor_s(r["n"])]
-    spi_summary = (f"n={len(spi)}, min={min(spi):.1f} s, median={st.median(spi):.1f} s, "
-                   f"max={max(spi):.1f} s per iteration (incl. next-stage bring-up)") if spi else "n=0"
-    below_desc = "; ".join(
-        f"raw run {r['run']} (paper run {r['paper_run']}) {r['stage']}->{r['next']}: "
-        f"{r['dt']:.0f} s for {r['n']} iterations < floor (N-1)*30+N*1 = "
-        f"{_stage_floor_s(r['n']):.0f} s ({r['spi']:.1f} s/iteration)"
-        for r in below_floor)
-    # delta = 30 s slept between iterations (+ ~1 s handshake each) implies a
-    # stage of N iterations spans >= (N-1)*30 + N s of wall clock.  No
-    # ceiling: large values only indicate waits.
-    delta_consistent = bool(spi) and not below_floor
-    delta_computed = (f"{spi_summary}; {len(below_floor)}/{len(spi)} stages below the paper's "
-                      f"(N-1)*{_PAPER_DELTA_S:.0f} s + N*{_PAPER_HANDSHAKE_S:.0f} s floor"
-                      + (f": {below_desc}" if below_floor else ""))
-
     def constant(cid, loc, quote, value, source):
         return _claim(C, cid, loc, quote, value, value, "CONSTANT", "CONSTANT: " + source)
 
     def xcheck(cid, loc, quote, value, computed, ok, source):
-        """CONSTANT with a data cross-check.  The parameter itself cannot be
-        recomputed (no per-trial timestamps), so a contradicting cross-check is
-        reported as UNVERIFIABLE with the evidence, not as a FAIL of the text."""
+        """CONSTANT with a structural/textual cross-check.  The parameter itself
+        cannot be recomputed, so a contradicting cross-check is reported as
+        UNVERIFIABLE with the evidence, not as a FAIL of the text."""
         return _claim(C, cid, loc, quote, value, computed,
                       "CONSTANT" if ok else "UNVERIFIABLE",
-                      ("CONSTANT: " if ok else "DATA CAVEAT: stage-start timestamps contradict this "
-                       "value for one stage (see computed). CONSTANT: ") + source)
+                      ("CONSTANT: " if ok else "DATA CAVEAT: the data contradict this value "
+                       "(see computed). CONSTANT: ") + source)
 
     TOR_10MIN = "Tor default MaxCircuitDirtiness = 600 s = 10 min (tor(1) manual)."
     INTRO_LIFE = ("Tor rend-spec-v3 / hs_circuit INTRO_POINT_LIFETIME_MIN_SECONDS = 18 h, "
@@ -340,27 +287,20 @@ def claims(C, traj, metrics) -> list[dict]:
                       "(contiguity verified in-module from the raw CSV)."))
     out.append(xcheck("const-033", "sections/implementation.tex:71",
                       "At stage~$0$ the monitored relay is the advertised Introduction Point.", "0",
-                      "earliest started_at_utc stage per run = "
+                      "earliest stage per run by (experiment_date, experiment_time_utc) = "
                       + ("IP for all 9 runs" if all_ip_first else str(first_stage)),
                       all_ip_first,
-                      "design; MET first stage_code per run is IP (earliest started_at_utc) - see setup-004."))
+                      "design; MET first stage_code per run is IP (earliest experiment_date + "
+                      "experiment_time_utc, minute resolution) - see setup-003."))
     out.append(constant("const-034", "sections/implementation.tex:101",
                         "removing the known predecessor $r_{m_{i-1}}$ from stage~$1$ onward", "1",
                         "algorithm design (same constant as const-018)."))
-    DELTA_NOTE = ("implementation parameter (delta = 30 s slept between iterations). Cross-check: "
-                  "started_at_utc(next stage) - started_at_utc(stage) from MET is an upper bound on the "
-                  "wall-clock span of a stage, so under the paper's own model (T = (31 s) N + 4 v, "
-                  "sections/04-setup-and-evaluation.tex:363-370) every non-final stage of N iterations "
-                  f"must span >= (N-1)*{_PAPER_DELTA_S:.0f} + N*{_PAPER_HANDSHAKE_S:.0f} s; no ceiling is "
-                  "applied (large values only indicate waits for visibility). Per-trial timestamps are "
-                  "absent, so delta is not exactly recomputable. No printed number depends on stage "
-                  "start times (only the IP-stage run labels), so this is a metadata cross-check."
-                  + (" The listed stage(s) fall below the floor, which delta = 30 s cannot produce; "
-                     "either started_at_utc of the following stage is wrong in run_stage_metrics.csv "
-                     "or delta was not honoured there." if below_floor else ""))
-    out.append(xcheck("const-035", "sections/implementation.tex:104",
-                      "$\\delta=30$~s, and repeats steps~6a--13 against the same relay", "30",
-                      delta_computed, delta_consistent, DELTA_NOTE))
+    out.append(constant("const-035", "sections/implementation.tex:104",
+                        "$\\delta=30$~s, and repeats steps~6a--13 against the same relay", "30",
+                        "implementation parameter (delta = 30 s slept between iterations); stage "
+                        "timestamps are not part of the released dataset, so it is not recomputable. "
+                        "Restated at sections/04-setup-and-evaluation.tex:329 and :370 "
+                        "(const-046/047, textual consistency)."))
     out.append(constant("const-036", "sections/implementation.tex:155",
                         "A typical ten-minute period on the deployed network involves roughly 550{,}000 "
                         "active users and about 1.4~million active circuits~\\cite{jansen2016safely}",
@@ -417,12 +357,10 @@ def claims(C, traj, metrics) -> list[dict]:
     d329, d370, d104 = (m.group(1) if m else None for m in (d329, d370, d104))
     out.append(xcheck("const-046", "sections/04-setup-and-evaluation.tex:329",
                       "The controller relaunches the client after $\\delta=30$~s", "30",
-                      f"tex: {d329}; implementation.tex:104 says {d104}"
-                      + (f"; wall-clock anomaly ({len(below_floor)} stage(s) below the "
-                         f"(N-1)*30+N s floor) reported under const-035" if below_floor else ""),
+                      f"tex: {d329}; implementation.tex:104 says {d104}",
                       d329 == "30" and d329 == d104,
                       "implementation parameter (same as const-035); textual check only that it equals "
-                      "implementation.tex:104. The wall-clock cross-check is reported once, under const-035."))
+                      "implementation.tex:104."))
     out.append(xcheck("const-047", "sections/04-setup-and-evaluation.tex:370",
                       "The $30$~s delay is a configurable\nparameter of our implementation", "30",
                       f"tex: {d370}; line 329 says {d329}; implementation.tex:104 says {d104}",

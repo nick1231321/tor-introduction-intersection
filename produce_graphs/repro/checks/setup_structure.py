@@ -4,8 +4,8 @@ Checks the paper's structural statements -- nine runs, K=4 stages, 36
 run--stage observations, stage order, thresholds, date span, run schedule,
 figure groupings, output-file layout -- against the shape of the raw CSVs
 (TRAJ = generated/trajectories_every_trial.csv, MET =
-generated/run_stage_metrics.csv), the ISO timestamps in MET, the files on
-disk, the text extracted from the committed figure PDFs, the panel grouping
+generated/run_stage_metrics.csv), the per-stage experiment_date / day_label /
+experiment_time_utc labels in MET (minute resolution), the files on disk, the text extracted from the committed figure PDFs, the panel grouping
 declared in repro/generate.py, and, for purely textual counts, by counting
 items in the CURRENT .tex sources (comment environments and %-lines are
 stripped before counting).
@@ -39,7 +39,7 @@ RAW_RUNS = list(range(4, 13))
 
 
 # --------------------------------------------------------------------------
-# helpers: paths, tex reading, timestamps (delegated to core.py)
+# helpers: paths, tex reading (delegated to core.py)
 # --------------------------------------------------------------------------
 def _root(C):
     """Project root (holds main.tex)."""
@@ -73,7 +73,22 @@ def _paragraph_around(lines, line_no):
 
 
 _norm = _core.norm_ws
-_parse_ts = _core.parse_utc
+
+
+def _hhmm(row):
+    """'HH:MM' of a MET row's experiment_time_utc ('HH:MM UTC')."""
+    return (row.get("experiment_time_utc") or "").strip().split(" ")[0][:5]
+
+
+def _stage_date(row):
+    """datetime.date of a MET row's experiment_date (YYYY-MM-DD)."""
+    return date.fromisoformat((row.get("experiment_date") or "").strip())
+
+
+def _stage_start(row):
+    """(experiment_date, 'HH:MM') of a stage's own MET row: its start day and
+    time at minute resolution, chronologically ordered as a tuple."""
+    return (_stage_date(row), _hhmm(row))
 
 
 def _quote_at(C, loc, quote, window=(1, 3)):
@@ -134,14 +149,15 @@ def _four_stages_check(traj, metrics):
 
 
 def _stage_order_check(metrics):
-    """started_at_utc strictly increasing IP < M1 < VG < EG within each run."""
+    """(experiment_date, HH:MM) strictly increasing IP < M1 < VG < EG within
+    each run (each stage's own MET row gives its start day and time)."""
     bad = []
     for rid in RAW_RUNS:
         rows = [metrics.get((rid, s)) for s in STAGES]
         if any(r is None for r in rows):
             bad.append((rid, "missing stage"))
             continue
-        ts = [_parse_ts(r["started_at_utc"]) for r in rows]
+        ts = [_stage_start(r) for r in rows]
         if not all(ts[i] < ts[i + 1] for i in range(3)):
             order = [s for _, s in sorted(zip(ts, STAGES))]
             bad.append((rid, "->".join(order)))
@@ -263,10 +279,11 @@ def claims(C, traj, metrics):
         "$r_{m_0},\\ldots,r_{m_3}$ denote the Introduction Point, the middle relay "
         "or layer-3 vanguard, the layer-2 vanguard, and the entry guard",
         "0..3 = IP,M1,VG,EG",
-        "IP<M1<VG<EG by started_at_utc in all 9 runs" if order_ok
+        "IP<M1<VG<EG by (experiment_date, experiment_time_utc) in all 9 runs" if order_ok
         else f"order violated in runs {order_bad}",
         st(order_ok),
-        "Stage index order inferred from strictly increasing MET.started_at_utc per run.")
+        "Stage index order inferred from strictly increasing (experiment_date, HH:MM) of "
+        "each stage's own MET row per run (minute resolution).")
 
     # ---- setup-004 ----
     add("setup-004", "sections/03-attack.tex:521",
@@ -313,34 +330,27 @@ def claims(C, traj, metrics):
         hdr = next(csv.reader(open(C.DATA / "run_stage_metrics.csv")))
     except Exception:
         pass
-    q_cols = [q for q in (10, 3, 2) if hdr and f"T_le_{q}" in hdr]
-    mism, n_cmp = [], 0
-    if hdr:
-        for (rid, s), seq in traj.items():
-            row = metrics.get((rid, s))
-            if row is None:
-                mism.append((rid, s, "no MET row"))
-                continue
-            for q in q_cols:
-                n_cmp += 1
-                want = C.T_le(seq, q)
-                got = row.get(f"T_le_{q}")
-                got = int(got) if got not in (None, "") else None
-                if want != got:
-                    mism.append((rid, s, q, got, want))
-    n_pop = len(traj) * len(q_cols)
-    ok8 = hdr is not None and len(q_cols) == 3 and not mism and n_cmp == n_pop
+    qs8 = (10, 3, 2)
+    undefined8, nonmono8 = [], []
+    for (rid, s), seq in sorted(traj.items()):
+        t = [C.T_le(seq, q) for q in qs8]
+        if any(v is None for v in t):
+            undefined8.append((rid, s, dict(zip(qs8, t))))
+        elif not (t[0] <= t[1] <= t[2]):
+            nonmono8.append((rid, s, dict(zip(qs8, t))))
+    ok8 = len(traj) == 36 and not undefined8 and not nonmono8
     add("setup-008", "sections/04-setup-and-evaluation.tex:304",
         "$T_{\\leq q}=\\min\\{j:|\\mathcal{I}_i^{(j)}|\\leq q\\}$ for $q\\in\\{10,3,2\\}$",
         "10, 3, 2",
-        f"MET columns present for q in {q_cols}; "
-        f"{n_cmp - sum(1 for m in mism if len(m) == 5)}/{n_pop} (run,stage,q) values "
-        f"equal min t with |I_t|<=q in TRAJ ({len(traj)} run-stages x {len(q_cols)} q)"
-        if hdr else "MET header unreadable",
+        f"T<=q = first trial with |I_t|<=q from TRAJ: defined for "
+        f"{len(traj) - len(undefined8)}/{len(traj)} run-stages and all three q, "
+        f"T<=10 <= T<=3 <= T<=2 in {len(traj) - len(undefined8) - len(nonmono8)}/{len(traj)}",
         st(ok8),
-        "Checks T_le_10/T_le_3/T_le_2 exist in MET and equal the first trial with "
-        "intersection_size<=q recomputed from TRAJ for every run-stage in TRAJ."
-        + (f" mismatches: {mism[:5]}" if mism else ""))
+        "T<=q is derived from trajectories_every_trial.csv alone (core.T_le); the check is "
+        "that every one of the 36 run-stages reaches each threshold q in {10,3,2} and that "
+        "the thresholds are ordered."
+        + (f" undefined: {undefined8[:5]}" if undefined8 else "")
+        + (f" non-monotone: {nonmono8[:5]}" if nonmono8 else ""))
 
     # ---- setup-009 (textual, from tab:impl-components + anchor paragraph) ----
     impl = _tex_lines(C, "sections/implementation.tex")
@@ -468,22 +478,26 @@ def claims(C, traj, metrics):
     tp, mp = gen / "trajectories_every_trial.csv", gen / "run_stage_metrics.csv"
     csvs = sorted(p.name for p in gen.glob("*.csv")) if gen.exists() else []
     thdr = next(csv.reader(open(tp))) if tp.exists() else None
-    need_met = ["run_id", "stage_code", "started_at_utc", "consensus_weight",
-                "guard_probability", "middle_probability",
-                "read_bytes_per_second", "write_bytes_per_second"]
+    need_met = ["run_id", "stage_code", "experiment_date", "day_label",
+                "experiment_time_utc", "consensus_weight"]
     missing = [c for c in need_met if hdr is None or c not in hdr]
+    extra = [c for c in (hdr or []) if c not in need_met]
     ok21 = (tp.exists() and mp.exists() and len(csvs) == 2
             and thdr == ["run_id", "stage", "trial", "intersection_size"]
-            and not missing)
+            and hdr == need_met)
     add("setup-021", "sections/implementation.tex:144",
         "one CSV records the run, stage, iteration, and intersection cardinality "
         "per observation, a second records stage-level metadata",
         "2 CSVs",
-        f"{len(csvs)} CSV(s) in generated/ ({', '.join(csvs)}); TRAJ header={thdr}; "
-        f"MET has Onionoo+timestamp columns" + (f" MISSING {missing}" if missing else ""),
+        f"{len(csvs)} CSV(s) in data/ ({', '.join(csvs)}); TRAJ header={thdr}; "
+        f"MET header={hdr}" + (f" MISSING {missing}" if missing else "")
+        + (f" UNEXPECTED {extra}" if extra else ""),
         st(ok21),
-        "File existence, exact TRAJ header, required MET columns (Onionoo metrics + "
-        "started_at_utc), and no other CSV in generated/.")
+        "File existence, exact TRAJ header, exact MET header and no other CSV in data/. "
+        "The released run_stage_metrics.csv is the reduced stage-level metadata file: per "
+        "run and stage it holds only the run/stage labels (experiment_date, day_label, "
+        "experiment_time_utc) and the monitored relay's consensus weight; every "
+        "convergence quantity is derived from the trajectories CSV.")
 
     # ---- setup-022 (textual) ----
     if impl is None:
@@ -565,48 +579,41 @@ def claims(C, traj, metrics):
         st(ok25), "raw run_id - 3 must cover exactly 1..9.")
 
     # ---- setup-026 (date span) ----
-    dates = sorted({_parse_ts(r["started_at_utc"]).date() for r in metrics.values()})
+    dates = sorted({_stage_date(r) for r in metrics.values()})
     day_map = {}
     for r in metrics.values():
-        day_map.setdefault(r.get("day_label"), set()).add(_parse_ts(r["started_at_utc"]).date())
+        day_map.setdefault(r.get("day_label"), set()).add(_stage_date(r))
     day_ok = all(len(v) == 1 for v in day_map.values()) and \
         sorted(day_map) == [f"Day {i}" for i in range(1, 5)] and \
         all(next(iter(day_map[f"Day {i}"])) == date(2026, 1, 6 + i) for i in range(1, 5))
     ok26 = bool(dates) and dates[0] == date(2026, 1, 7) and dates[-1] == date(2026, 1, 10) and day_ok
     add("setup-026", "sections/appendix_results.tex:14",
         "conducted on 7--10~January~2026.", "7--10 January 2026",
-        (f"{dates[0].isoformat()} .. {dates[-1].isoformat()} over {len(metrics)} started_at_utc; "
+        (f"{dates[0].isoformat()} .. {dates[-1].isoformat()} over {len(metrics)} experiment_date; "
          f"day_label Day 1..4 -> {[next(iter(day_map[d])).strftime('%d') for d in sorted(day_map)]} Jan")
         if dates else "no MET rows",
         st(ok26),
-        "min/max of MET.started_at_utc dates; day_label must map 1:1 onto 07..10 Jan.")
+        "min/max of MET.experiment_date (per stage row); day_label must map 1:1 onto 07..10 Jan.")
 
-    # ---- setup-027 (run schedule, from the IP-stage timestamp) ----
-    got_sched, label_incons = [], []
+    # ---- setup-027 (run schedule, from the IP-stage row's labels) ----
+    got_sched = []
     for rid in RAW_RUNS:
         r = metrics.get((rid, "IP"))
         if r is None:
             got_sched.append((C.PAPER_RUN.get(rid, rid - 3), None, None))
             continue
-        ts = _parse_ts(r["started_at_utc"])
-        hhmm = ts.strftime("%H:%M")
-        got_sched.append((C.PAPER_RUN.get(rid, rid - 3), r.get("day_label"), hhmm))
-        if r.get("experiment_time_utc") != hhmm + " UTC":
-            label_incons.append((rid, r.get("experiment_time_utc"), hhmm))
+        got_sched.append((C.PAPER_RUN.get(rid, rid - 3), r.get("day_label"), _hhmm(r)))
     tex_sched = [(int(a), f"Day {b}", c) for a, b, c in app_labels]
-    ok27 = bool(tex_sched) and tex_sched == got_sched and not label_incons
+    ok27 = bool(tex_sched) and tex_sched == got_sched
     add("setup-027", "sections/appendix_results.tex:26",
         "R1 (Day 1, 02:00)",
         "; ".join(f"R{a} ({b}, {c})" for a, b, c in tex_sched) or "n/a",
-        "; ".join(f"R{a} ({b}, {c})" for a, b, c in got_sched)
-        + (f"; experiment_time_utc label inconsistent with timestamp: {label_incons}"
-           if label_incons else ""),
+        "; ".join(f"R{a} ({b}, {c})" for a, b, c in got_sched),
         st(ok27),
-        "Run label = (day_label, HH:MM of started_at_utc) of the IP-stage row in MET, "
+        "Run label = (day_label, HH:MM of experiment_time_utc) of the IP-stage row in MET, "
         "compared with the 9 'Rn (Day d, hh:mm)' labels parsed from the appendix "
         "table (R1..R9 at lines 26 ff.); day_label is anchored to the date by "
-        "setup-026. Sub-check: MET.experiment_time_utc must equal HH:MM of "
-        "started_at_utc. ASSUMPTION: a run is labelled by its IP-stage start (later "
+        "setup-026. ASSUMPTION: a run is labelled by its IP-stage start (later "
         "stages may begin on a later day, e.g. raw run 9 EG on Day 3).")
 
     # ---- setup-028 / 030 / 031 (figure groupings, from PDF text + generate.py) ----

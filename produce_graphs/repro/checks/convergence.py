@@ -1,8 +1,9 @@
 """Convergence-behaviour claims (module 'convergence').
 
 Success and convergence statistics recomputed from the raw per-trial
-intersection trajectories (generated/trajectories_every_trial.csv) and cross
-checked against generated/run_stage_metrics.csv.
+intersection trajectories (generated/trajectories_every_trial.csv); the
+metrics CSV (generated/run_stage_metrics.csv) contributes only the consensus
+weight used to group CW-matched stages.
 
 Shorthand used throughout:
   seq(r,s)   = intersection_size of TRAJ rows (run_id=r, stage=s) ordered by
@@ -22,7 +23,7 @@ uses len(seq) for run totals, and looks up trial t with at(seq, t) which holds
 try/except so a malformed stage yields one FAIL row instead of suppressing the
 other rows.
 
-Every computed value is derived from the two CSVs at call time; nothing is
+Every computed value is derived from the CSVs at call time; nothing is
 hard-coded. Where the paper's wording cannot be reproduced from the CSVs alone
 (e.g. "correct successor", or a count that only matches a table subset) the
 status says so and the note explains the discrepancy.
@@ -119,32 +120,25 @@ def claims(C, traj, metrics):
     n_runs_ok = sum(1 for r in C.RUN_IDS
                     if all(tconv((r, s)) is not None and traj[(r, s)][-1] == 1
                            for s in C.STAGES))
-    met_conv_nonnull = sum(
-        1 for k in keys if _met_int(metrics, k, "trials_to_convergence") is not None)
-    all_runs_ok = (not nonconverged and n_runs_ok == len(C.RUN_IDS)
-                   and met_conv_nonnull == len(keys))
+    all_runs_ok = (not nonconverged and n_runs_ok == len(C.RUN_IDS))
     all_runs_computed = (f"{n_runs_ok} of {len(C.RUN_IDS)} runs converged at all "
-                         f"4 stages; {met_conv_nonnull}/{len(keys)} "
-                         f"MET.trials_to_convergence non-null")
+                         f"4 stages ({len(keys) - len(nonconverged)}/{len(keys)} stages "
+                         f"reach |I|=1)")
     if nonconverged:
         all_runs_computed += f"; NON-CONVERGED stages (no |I|=1 trial): {nonconverged}"
 
-    # conv-003 / conv-026: convergence = singleton, consistent across sources
+    # conv-003 / conv-026: convergence = first singleton trial = last recorded trial
     conv_def_bad = []
     for k in keys:
         seq = traj[k]
-        a = _met_int(metrics, k, "trials_to_convergence")
-        b = _met_int(metrics, k, "T_le_1")
         c = tconv(k)
         d = len(seq)
-        if not (c is not None and a == b == c == d and seq[-1] == 1):
-            conv_def_bad.append((k, a, b, c, d, seq[-1] if seq else None))
+        if not (c is not None and c == d and seq[-1] == 1):
+            conv_def_bad.append((k, c, d, seq[-1] if seq else None))
     conv_def_ok = not conv_def_bad
-    conv_def_computed = (f"all {len(keys)} stages: MET.trials_to_convergence == "
-                         "MET.T_le_1 == T<=1(seq) == len(seq) and seq[-1]==1"
+    conv_def_computed = (f"all {len(keys)} stages: T<=1(seq) == len(seq) and seq[-1]==1"
                          if conv_def_ok
-                         else f"mismatches (k, MET.tconv, MET.T_le_1, T<=1, len, last): "
-                              f"{conv_def_bad}")
+                         else f"mismatches (k, T<=1, len, last): {conv_def_bad}")
 
     # conv-004 / conv-027: min intersection size (empty never recorded)
     min_size = min(v for seq in traj.values() for v in seq)
@@ -197,8 +191,8 @@ def claims(C, traj, metrics):
           "Stage~$i$ converges at the first iteration $j$\nfor which $|\\mathcal{I}_i^{(j)}|=1$.",
           "1",
           lambda: (conv_def_computed, conv_def_ok),
-          "Definition check: convergence trial equals the first singleton trial "
-          "in every (run, stage), and the two CSVs agree.")
+          "Definition check: in every (run, stage) the first singleton trial is "
+          "the last recorded trial (recording stops at convergence).")
 
     # conv-004
     _emit(out, "conv-004", "sections/03-attack.tex:549",
@@ -355,11 +349,9 @@ def claims(C, traj, metrics):
     def _c013():
         want = {6: 12, 8: 142, 9: 251}
         got = {r: tconv((r, "VG")) for r in want}
-        got_met = {r: _met_int(metrics, (r, "VG"), "trials_to_convergence") for r in want}
-        ok = all(got[r] is not None and got[r] == want[r] == got_met[r] for r in want)
+        ok = all(got[r] is not None and got[r] == want[r] for r in want)
         return (", ".join(f"{got[r]}" for r in (6, 8, 9)) +
-                f" [Tconv(VG) of raw 6, 8, 9 = R3, R5, R6; MET agrees: {got_met == got}]",
-                ok)
+                " [Tconv(VG) of raw 6, 8, 9 = R3, R5, R6]", ok)
     _emit(out, "conv-013", "sections/05-discussion.tex:75",
           "converged after $12$, $142$, and $251$ iterations",
           "12, 142, 251", _c013,
@@ -372,10 +364,8 @@ def claims(C, traj, metrics):
     def _c015():
         want = {12: 4, 11: 53}
         got = {r: tconv((r, "M1")) for r in want}
-        got_met = {r: _met_int(metrics, (r, "M1"), "trials_to_convergence") for r in want}
-        ok = all(got[r] is not None and got[r] == want[r] == got_met[r] for r in want)
-        return (f"{got[12]}, {got[11]} [Tconv(M1) of raw 12, 11 = R9, R8; "
-                f"MET agrees: {got_met == got}]", ok)
+        ok = all(got[r] is not None and got[r] == want[r] for r in want)
+        return (f"{got[12]}, {got[11]} [Tconv(M1) of raw 12, 11 = R9, R8]", ok)
     _emit(out, "conv-015", "sections/05-discussion.tex:76",
           "required $4$ and $53$, respectively",
           "4, 53", _c015,
@@ -403,25 +393,20 @@ def claims(C, traj, metrics):
     # conv-017
     def _c017():
         init = {r: _at(_seq(traj, r, "IP"), 1) for r in raw_runs}
-        init_met = {r: _met_int(metrics, (r, "IP"), "initial_intersection_size")
-                    for r in raw_runs}
-        ok = (min(init.values()) == 79 and max(init.values()) == 84 and init == init_met)
+        ok = (min(init.values()) == 79 and max(init.values()) == 84)
         return (f"{min(init.values())}--{max(init.values())} [|A1| raw 4,7,9 = "
-                + ", ".join(str(init[r]) for r in raw_runs)
-                + f"; MET agrees: {init == init_met}]", ok)
+                + ", ".join(str(init[r]) for r in raw_runs) + "]", ok)
     _emit(out, "conv-017", "sections/05-discussion.tex:79",
           "started with similar sets of $79$--$84$ candidates",
           "79--84", _c017,
-          "seq(r,IP)[1] for raw runs 4, 7, 9 compared with MET.initial_intersection_size.")
+          "seq(r,IP)[1] (= |A1|) for raw runs 4, 7, 9.")
 
     # conv-018
     def _c018():
         t10ip = {r: C.T_le(_seq(traj, r, "IP"), 10) for r in raw_runs}
-        t10ip_met = {r: _met_int(metrics, (r, "IP"), "T_le_10") for r in raw_runs}
         all3 = all(v is not None and v <= 3 for v in t10ip.values())
         return ("T<=10(IP) raw 4,7,9 = " + ", ".join(str(t10ip[r]) for r in raw_runs)
-                + f"; all <= 3: {all3}; MET agrees: {t10ip == t10ip_met}",
-                all3 and t10ip == t10ip_met)
+                + f"; all <= 3: {all3}", all3)
     _emit(out, "conv-018", "sections/05-discussion.tex:79",
           "reached $|\\mathcal{I}|\\leq10$ within three iterations",
           "3", _c018,
@@ -431,10 +416,8 @@ def claims(C, traj, metrics):
     def _c019():
         want = {4: 285, 7: 8, 9: 324}
         tc = {r: tconv((r, "IP")) for r in raw_runs}
-        tc_met = {r: _met_int(metrics, (r, "IP"), "trials_to_convergence") for r in raw_runs}
-        ok = all(tc[r] is not None and tc[r] == want[r] == tc_met[r] for r in raw_runs)
-        return (", ".join(str(tc[r]) for r in raw_runs)
-                + f" [Tconv(IP) raw 4, 7, 9; MET agrees: {tc == tc_met}]", ok)
+        ok = all(tc[r] is not None and tc[r] == want[r] for r in raw_runs)
+        return (", ".join(str(tc[r]) for r in raw_runs) + " [Tconv(IP) raw 4, 7, 9]", ok)
     _emit(out, "conv-019", "sections/05-discussion.tex:80",
           "yet converged after $285$, $8$, and $324$ iterations, respectively",
           "285, 8, 324", _c019,
@@ -526,20 +509,14 @@ def claims(C, traj, metrics):
             s = traj[k]
             if not (s and all(v > 1 for v in s[:-1]) and s[-1] == 1):
                 bad.append(("TRAJ", k, "|I|>1 before last trial and last==1 violated"))
-            n_rec = _met_int(metrics, k, "n_recorded_iterations")
-            n_tc = _met_int(metrics, k, "trials_to_convergence")
-            if not (n_rec is not None and n_rec == n_tc == len(s)):
-                bad.append(("MET", k, f"n_recorded={n_rec}, trials_to_convergence={n_tc}, "
-                            f"len(traj)={len(s)}"))
-        comp = (f"all {len(keys)} stages: |I_t| > 1 for every t < Tconv and |I_Tconv| = 1; "
-                "MET.n_recorded_iterations == MET.trials_to_convergence == len(TRAJ seq) "
-                "for all rows" if not bad else f"violations: {bad}")
+        comp = (f"all {len(keys)} stages: |I_t| > 1 for every t < Tconv and |I_Tconv| = 1 "
+                "(no trial recorded after convergence)" if not bad else f"violations: {bad}")
         return comp, not bad
     _emit(out, "conv-025", "sections/implementation.tex:102",
           "If the intersection still holds\nmore than one pseudonym, the controller kills the probe client",
           "more than one", _c025,
           "Iteration continues exactly while |I| > 1 and no trials were recorded "
-          "after convergence (TRAJ and MET agree on the count).")
+          "after convergence (the trajectory ends at its first singleton).")
 
     # conv-026
     _emit(out, "conv-026", "sections/implementation.tex:108",

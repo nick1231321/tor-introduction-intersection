@@ -9,8 +9,8 @@ Every printed row is parsed from the CURRENT active tex (comment blocks and
 %-lines ignored) and recomputed from the data:
   * label: paper run p = raw run p+3; D{d}/HH:MM from the run's IP-stage row
     (ASSUMPTION: labels use the run start, not the stage start).
-  * CW: consensus_weight for (run, stage); |A~1| = seq[0]; T<=q = C.T_le(seq, q);
-    Tconv = C.T_le(seq, 1); each cross-checked against run_stage_metrics.csv.
+  * CW: consensus_weight for (run, stage) from run_stage_metrics.csv; |A~1| =
+    seq[0]; T<=q = C.T_le(seq, q); Tconv = C.T_le(seq, 1), all from the trajectory.
   * row selection (contr-sel): the four runs shown per stage must be the ones
     generate.contrast_runs() picks (min, median, second-largest, max T_conv).
   * layout (contr-body): the whole tabular body must equal what generate.py
@@ -125,11 +125,6 @@ def claims(C, traj, metrics):
                     t10=C.T_le(seq, 10), t3=C.T_le(seq, 3), t2=C.T_le(seq, 2),
                     tconv=C.T_conv(seq))
         notes = []
-        for kk, col in [("a1", "initial_intersection_size"), ("t10", "T_le_10"),
-                        ("t3", "T_le_3"), ("t2", "T_le_2"), ("tconv", "trials_to_convergence")]:
-            mv = int(float(met[col]))
-            if mv != comp[kk]:
-                notes.append(f"metrics.{col}={mv} != trajectory-derived {comp[kk]}")
         sd = re.search(r"(\d+)", met["day_label"]); st_ = re.search(r"(\d\d:\d\d)", met["experiment_time_utc"])
         if (int(sd.group(1)), st_.group(1)) != (comp["day"], comp["time"]):
             notes.append(f"label uses run start D{comp['day']} {comp['time']}; stage started "
