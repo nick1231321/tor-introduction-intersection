@@ -242,7 +242,7 @@ run gives current, slightly different numbers.
 Ensure no Tor process is running before executing the script.
 
 ```bash
-python3 produce_graphs/measure_introduce_time.py
+python3 produce_graphs/measure_introducenew.py
 ```
 
 Modify:
