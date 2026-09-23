@@ -202,14 +202,42 @@ pip3 install matplotlib requests
 
 ---
 
-### Figures 2 and 3
-```bash
-python3 produce_graphs/generate_stats_and_graphs.py
+### Dataset and evaluation tables/figures
+
+The raw measurements of the nine end-to-end experiments are released in
+`produce_graphs/repro/data/` (per-iteration intersection sizes for every run and
+stage, plus per-stage relay metadata). The toolkit in `produce_graphs/repro/`
+regenerates from them every data-derived table and figure of the paper (the
+end-to-end cost table, the within-stage convergence table, the appendix table
+with all 36 run/stage rows, and the convergence figures) and recomputes every
+number stated in the evaluation:
+
 ```
+cd produce_graphs/repro
+make tables                              # tables -> out/tables/, figures -> out/figures/
+PAPER_ROOT=/path/to/paper make verify    # check every printed number against the paper sources
+```
+
+See `produce_graphs/repro/README.md` for the data format and the list of checks.
 
 ---
 
-### Table 1
+### Relay-concentration figures (jurisdiction appendix)
+
+Run:
+
+```
+python3 produce_graphs/generate_stats_and_graphs.py
+```
+
+This script downloads the current relay list from Onionoo and produces the
+top-15-countries plot and the Fourteen-Eyes selection-probability plot. The
+paper's figures were produced from the 30 November 2025 snapshot, so a fresh
+run gives current, slightly different numbers.
+
+---
+
+### Introduction-handshake latency table (appendix)
 
 Ensure no Tor process is running before executing the script.
 
