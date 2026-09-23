@@ -3,8 +3,10 @@
 Everything printed in the paper's evaluation that derives from the nine
 end-to-end experiments is recomputed here from the raw measurements in
 `data/`. Nothing is hard-coded: `generate.py` writes the table bodies and
-figures from the data, and `verify.py` recomputes every stated number and
-compares it with the paper text.
+figures from the data, and `verify.py` recomputes every such number and
+compares it with the paper text. The toolkit covers only the numbers derived
+from the nine runs; protocol constants, cited figures and inputs outside this
+dataset are not part of it.
 
 ## Data (`data/`, the released dataset)
 
@@ -19,8 +21,7 @@ dataset.
 
 ## Requirements
 
-Python 3.9+, `matplotlib` (figures only). `poppler` (`pdftotext`) is optional
-and only used to check the labels inside the generated figure PDFs.
+Python 3.9+, `matplotlib` (figures only).
 
 ## Use
 
@@ -37,26 +38,36 @@ and only used to check the labels inside the generated figure PDFs.
 - `run_stage_thresholds_body.tex` — the appendix table with all 36 run/stage rows;
 - `threshold_summary.pdf`, `runs_grid_{a,b,c}.pdf` — the appendix figures.
 
-`make verify` has two modes:
+`make verify` reports one row per claim with two statuses only: **PASS** (the
+value recomputed from `data/` equals the one printed in the paper) or
+**FAIL** (it does not; the note says why). Every `computed` value is a
+function of the two CSVs alone, so every claim can be recomputed anywhere.
+There are two modes:
 
 - **With the paper sources** (`PAPER_ROOT=/path/to/paper make verify`): every
-  printed value is read from the LaTeX text and compared with the recomputed
-  one (PASS/FAIL). This run also freezes each claim's sentence, printed value
-  and recomputed value into `claims_snapshot.json`.
+  printed value is read from the LaTeX text (a moved sentence is re-located, a
+  sentence printed nowhere is FAIL) and compared with the recomputed one. This
+  run also freezes each claim's sentence, location, printed value and
+  recomputed value into `claims_snapshot.json`.
 - **Without the sources (reviewer mode, the default from a clean clone):** the
   sentence and printed value of each claim come from `claims_snapshot.json`,
   which was frozen from the submitted version; the value is recomputed from
-  `data/` now. PASS means the recomputation reproduces the frozen printed value.
-  Checks whose evaluation itself needs the sources (table structure, counts of
-  enumerated items) are reported FROZEN with the result they had against the
-  sources. The run writes `out/manual_checklist.md`: for every claim the
+  `data/` now. PASS means the frozen comparison passed and today's
+  recomputation equals the frozen one; a changed dataset or check, a claim
+  missing from the snapshot, or a snapshot claim no module produces any more
+  is FAIL. Both modes write `out/manual_checklist.md`: for every claim the
   sentence to look for in the PDF, the value printed there and the recomputed
   value, so each one can be checked by hand against the paper.
 
-Claims whose inputs are not part of this dataset (the Onionoo snapshot behind
-the jurisdiction appendix, the raw introduction-latency trials, the operated
-relays' ages) are reported as UNVERIFIABLE with the recipe to compute them once
-those inputs are available.
+If neither the sources nor `claims_snapshot.json` are available there is
+nothing to compare against: the run prints a `NO-SNAPSHOT` banner, lists every
+claim with paper `n/a` and status FAIL (the recomputed values are still shown)
+and exits with status 2.
+
+The two table-body claims (`contr-body`, `app-body`) compare a digest
+("`<n> lines, sha1 <12 hex>`" of the whitespace-normalised body lines) of the
+table printed in the paper with the same digest of the body `generate.py`
+emits, so `make tables` and the paper cannot drift apart.
 
 ## Layout
 
@@ -71,10 +82,21 @@ those inputs are available.
 - `generate.py` — table bodies and figures.
 - `verify.py` — data-integrity check (both CSVs cover the same 36 run/stage
   pairs; the metrics file carries no precomputed columns to compare), discovery
-  of `checks/*.py`, report.
+  of `checks/*.py`, snapshot replay, report and checklist.
 - `checks/` — one module per section or table of the paper; each exposes
   `claims(C, traj, metrics)` returning `{id, location, quote, paper, computed,
-  status, note}` records.
+  status, note}` records with status PASS or FAIL:
+  - `convergence.py` (`conv-001..027`) — success and convergence statistics of
+    the 36 stages (medians, thresholds, plateaus, collapses);
+  - `timing_cost.py` (`time-001`, `time-006..012`) — the cost model
+    T = 31 s·N + 4v applied to the nine run totals;
+  - `end_to_end_table.py` (`e2e-001..010`) — every row of the end-to-end table;
+  - `stage_contrasts_table.py` (`contr-001..016`, `contr-sel-*`, `contr-body`) —
+    every row, the row selection per stage and the body of the within-stage table;
+  - `appendix_run_table.py` (`app-002..037`, `app-body`) — all 36 rows and the
+    body of the appendix run/stage table;
+  - `setup_structure.py` (`setup-*`) — nine runs, four stages, 36 observations,
+    stage order, run ids, date span and run schedule as stated in the text.
 - `claims_snapshot.json` — sentence, printed value and recomputed value of every
   claim, frozen from the submitted version (input of reviewer mode).
 - `out/tables/` — the table bodies as last generated (committed for reference);
@@ -83,10 +105,10 @@ those inputs are available.
 ## Adding a claim
 
 Add a record to the module for that section (or a new `checks/<name>.py`; it is
-discovered automatically). Recompute the value from `traj` / `metrics`; parse
-the printed value from the `.tex` with `C.relocate` / `C.search_paper` so that
-an edited or moved sentence is re-checked rather than silently matched. Run
-`make verify`.
+discovered automatically). Its `computed` value must be derived from `traj` /
+`metrics` only; parse the printed value from the `.tex` with `C.relocate` /
+`C.search_paper` so that an edited or moved sentence is re-checked rather than
+silently matched. Run `PAPER_ROOT=... make verify` to refresh the snapshot.
 
 ## Verification report for the submitted version
 

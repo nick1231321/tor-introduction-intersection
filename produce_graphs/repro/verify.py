@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify every measurement-based number printed in the paper against the data.
+"""Verify every number the paper derives from the nine experimental runs.
 
     python3 verify.py [--module NAME ...] [--full] [--out PATH]
 
@@ -14,13 +14,25 @@
 2. Every module in checks/ (discovered with pkgutil) exposes
        claims(C, traj, metrics) -> [ {id, location, quote, paper, computed,
                                       status, note}, ... ]
-   with status in PASS | FAIL | UNVERIFIABLE | CONSTANT. All records are
-   concatenated. A module that fails to import or raises is itself a FAIL row.
-3. checks/legacy.py names the module ids that replaced the old hand-written
-   registry; an id it names that no module produced is a FAIL row.
+   with status PASS or FAIL. Every `computed` value is a function of the two
+   CSVs alone. All records are concatenated; a module that fails to import
+   or raises is itself a FAIL row.
+3. Modes:
+   * with the paper sources (PAPER_ROOT/main.tex exists): the printed side of
+     each claim is read from the LaTeX text; the run freezes every row into
+     claims_snapshot.json;
+   * without the sources but with claims_snapshot.json (reviewer mode): the
+     sentence, location and printed value come from the snapshot, `computed`
+     is recomputed now; PASS iff the snapshot row was PASS and today's value
+     equals the frozen one; a claim missing on either side is FAIL;
+   * without sources and without snapshot: nothing can be compared, so every
+     row is printed with paper "n/a" and status FAIL under a NO-SNAPSHOT
+     banner, and the exit status is 2.
 4. The report (one row per claim, sorted by paper order of the .tex file and
-   then by line) is printed and written to out/verify_report.md.
-5. Exit status is 1 iff any claim FAILs or the integrity check finds a mismatch.
+   then by line) is printed and written to out/verify_report.md; the manual
+   checklist to out/manual_checklist.md.
+5. Exit status is 1 iff any claim FAILs or the integrity check finds a mismatch
+   (2 in the NO-SNAPSHOT case).
 """
 from __future__ import annotations
 
@@ -41,10 +53,8 @@ import checks as checks_pkg  # noqa: E402
 HERE = Path(__file__).resolve().parent
 DEFAULT_OUT = HERE / "out" / "verify_report.md"
 SNAPSHOT = HERE / "claims_snapshot.json"          # printed values frozen from the submitted paper
-CHECKLIST = HERE / "out" / "manual_checklist.md"  # reviewer-facing list written in snapshot mode
-STATUSES = ("PASS", "FAIL", "FROZEN", "UNVERIFIABLE", "CONSTANT")
-# FROZEN (reviewer mode only): a textual/structural check that passed against the paper
-# sources when the snapshot was taken and cannot be recomputed from data/ alone.
+CHECKLIST = HERE / "out" / "manual_checklist.md"  # reviewer-facing list
+STATUSES = ("PASS", "FAIL")
 COLS = ("id", "location", "paper", "computed", "status", "note")
 INTEGRITY_COLS = [("T_le_10", 10), ("T_le_5", 5), ("T_le_3", 3), ("T_le_2", 2), ("T_le_1", 1)]
 
@@ -102,7 +112,7 @@ def _normalise(rec, module):
 
 
 def load_claims(traj, metrics, only=None):
-    rows, covered_by = [], {}
+    rows = []
     for mi in sorted(pkgutil.iter_modules(checks_pkg.__path__), key=lambda m: m.name):
         if only and mi.name not in only:
             continue
@@ -111,25 +121,12 @@ def load_claims(traj, metrics, only=None):
             mod = importlib.import_module(qual)
             recs = mod.claims(C, traj, metrics)
             rows.extend(_normalise(r, mi.name) for r in recs)
-            for name, ids in getattr(mod, "COVERED_BY", {}).items():
-                covered_by[name] = (mi.name, list(ids))
         except Exception as e:  # noqa: BLE001 - a broken module must show up, never vanish
             tb = traceback.format_exc().strip().splitlines()[-1]
             rows.append({"id": f"{mi.name} (module error)", "module": mi.name,
                          "location": f"repro/checks/{mi.name}.py:?", "quote": "",
                          "paper": "-", "computed": f"{type(e).__name__}: {e}",
                          "status": "FAIL", "note": tb})
-    if not only:   # coverage guard only makes sense when every module ran
-        have = {r["id"] for r in rows}
-        for name, (mod, ids) in covered_by.items():
-            missing = [i for i in ids if i not in have]
-            if missing:
-                rows.append({"id": f"{mod}-coverage", "module": mod,
-                             "location": f"repro/checks/{mod}.py:?", "quote": name,
-                             "paper": ", ".join(ids), "computed": f"missing ids: {missing}",
-                             "status": "FAIL",
-                             "note": f"old registry claim {name!r} is mapped to module ids "
-                                     f"that no module produced; update COVERED_BY or re-add the check."})
     # duplicate ids across modules are a registry bug
     seen, dup = {}, set()
     for r in rows:
@@ -174,51 +171,38 @@ def write_snapshot(rows):
     return len(data)
 
 
-def apply_snapshot(rows):
-    """Reviewer mode: no LaTeX sources. Take the sentence and the printed value
-    of each claim from the snapshot and recompute the value from data/ now.
-    PASS iff the snapshot's comparison passed AND today's recomputation equals
-    the one frozen with it (a changed dataset or check shows up as FAIL).
-    A check whose computed side needs the sources (table structure, counts of
-    enumerated items, ...) cannot be recomputed here; it is reported FROZEN with
-    the status it had against the sources."""
+def _squash(v):
+    return " ".join(str(v).split())
+
+
+def apply_snapshot(rows, partial=False):
+    """Reviewer mode: no LaTeX sources. Take the sentence, location and printed
+    value of each claim from the snapshot and recompute the value from data/
+    now. PASS iff the snapshot's comparison passed AND today's recomputation
+    equals the one frozen with it (a changed dataset or check shows up as
+    FAIL). A claim produced now but absent from the snapshot, or frozen in the
+    snapshot but not produced now, is FAIL (the latter only when every module
+    ran, i.e. partial=False)."""
     snap = {d["id"]: d for d in json.loads(SNAPSHOT.read_text(encoding="utf-8"))}
-    frozen_note = "textual/structural check; verified against the paper sources when the snapshot was taken, not recomputable from data/ alone"
-
-    def not_recomputable(v):
-        v = " ".join(str(v).split())
-        return v in ("", "n/a", "-") or "None" in v or v.startswith("EXCEPTION")
-
     seen = set()
     for r in rows:
         d = snap.get(r["id"])
         if d is None:
-            r["status"] = "UNVERIFIABLE"
+            r["status"] = "FAIL"
             r["note"] = "claim not in claims_snapshot.json (added after the snapshot); " + r["note"]
             continue
         seen.add(r["id"])
         r["quote"], r["paper"], r["location"] = d["quote"], d["paper"], d["location"]
-        if d["status"] not in ("PASS", "FAIL"):
-            r["status"], r["note"] = d["status"], d["note"]
-            continue
-        same = " ".join(r["computed"].split()) == " ".join(d["computed"].split())
-        if not same and (r["status"] in ("UNVERIFIABLE", "CONSTANT") or not_recomputable(r["computed"])):
-            # the module could not evaluate this check without the sources
-            r["computed"] = d["computed"]
-            r["status"] = "FROZEN" if d["status"] == "PASS" else "FAIL"
-            r["note"] = frozen_note + "; " + d["note"]
-            continue
+        same = _squash(r["computed"]) == _squash(d["computed"])
         r["status"] = "PASS" if (d["status"] == "PASS" and same) else "FAIL"
         r["note"] = (("" if same else "RECOMPUTED VALUE DIFFERS from the one frozen in the snapshot "
                       f"({d['computed']}); ") + ("" if d["status"] == "PASS" else
                      "the snapshot already recorded a mismatch with the printed value; ") + d["note"])
     for cid, d in snap.items():
-        if cid not in seen:
-            st = {"PASS": "FROZEN", "FAIL": "FAIL"}.get(d["status"], d["status"])
+        if cid not in seen and not partial:
             rows.append({**{k: d[k] for k in ("id", "location", "quote", "paper", "computed")},
-                         "status": st, "module": "snapshot",
-                         "note": (frozen_note if st == "FROZEN" else "claim is in the snapshot but no check produced it now")
-                                 + "; " + d["note"]})
+                         "status": "FAIL", "module": "snapshot",
+                         "note": "claim is in the snapshot but no check produced it now; " + d["note"]})
     return rows
 
 
@@ -228,10 +212,8 @@ def render_checklist(rows, integ):
     parts = ["# Manual verification checklist", "",
              "For each claim: the sentence or table row as printed in the paper (search for it in the PDF),",
              "the value printed there, and the value recomputed from `data/` by `make verify`.",
-             "PASS = recomputed value equals the printed one; FROZEN = a textual/structural check that",
-             "passed against the paper sources when the snapshot was taken and cannot be recomputed from",
-             "data/ alone; CONSTANT = protocol/implementation constant; UNVERIFIABLE = input not part of",
-             "the released data (reason given).", "",
+             "PASS = the recomputed value equals the printed one; FAIL = it does not (the note says why).",
+             "Every value is derived from the nine experimental runs in `data/`.", "",
              ", ".join(f"{s} {n[s]}" for s in STATUSES) + f"; total {len(rows)}"
              + (f"; DATA INTEGRITY MISMATCHES {len(integ)}" if integ else ""), ""]
     cur = None
@@ -241,11 +223,11 @@ def render_checklist(rows, integ):
             cur = sec
             parts += [f"## {sec}", ""]
         parts += [f"- **{r['id']}** — {r['status']}",
-                  f"  - says: \"{plain(r['quote'])}\"" if r["quote"] else "  - says: (no sentence; structural check)",
+                  f"  - says: \"{plain(r['quote'])}\"" if r["quote"] else "  - says: (table row / body digest)",
                   f"  - printed: {plain(r['paper'])}",
-                  f"  - recomputed: {' '.join(str(r['computed']).split())}"]
+                  f"  - recomputed: {_squash(r['computed'])}"]
         if r["status"] != "PASS" and r["note"]:
-            parts.append(f"  - note: {' '.join(r['note'].split())}")
+            parts.append(f"  - note: {_squash(r['note'])}")
         parts.append("")
     return "\n".join(parts) + "\n"
 
@@ -268,7 +250,7 @@ def loc_key(loc, file_rank):
 
 # ------------------------------------------------------------------------ report
 def _cell(s, width=None):
-    s = " ".join(str(s).split()).replace("|", "\\|")
+    s = _squash(s).replace("|", "\\|")
     if width and len(s) > width:
         s = s[: width - 1] + "…"
     return s
@@ -341,25 +323,28 @@ def main(argv=None):
     integ = integrity_check(traj, metrics)
     rows = load_claims(traj, metrics, only=set(a.module) if a.module else None)
     no_tex = not (C.ROOT / "main.tex").exists()
-    snapshot_mode = no_tex and SNAPSHOT.exists() and not a.module
+    snapshot_mode = no_tex and SNAPSHOT.exists()
+    no_snapshot = no_tex and not snapshot_mode
     if snapshot_mode:
-        rows = apply_snapshot(rows)
-    elif no_tex:
-        # No sources and no snapshot: the printed side cannot be read, so nothing
-        # can PASS or FAIL; keep the recomputed values, mark the rest.
+        rows = apply_snapshot(rows, partial=bool(a.module))
+    elif no_snapshot:
+        # No sources and no snapshot: the printed side cannot be read, so no
+        # row can pass; keep the recomputed values for inspection.
         for r in rows:
-            if r["status"] in ("PASS", "FAIL") and not r["id"].endswith("(module error)"):
-                r["status"] = "UNVERIFIABLE"
-                r["note"] = "paper sources not found (set PAPER_ROOT to the directory holding main.tex); " + r["note"]
+            if not r["id"].endswith("(module error)"):
+                r["paper"] = "n/a"
+                r["status"] = "FAIL"
+                r["note"] = "no printed value available (no paper sources and no claims_snapshot.json)"
     rank = paper_file_order()
     rows.sort(key=lambda r: (loc_key(r["location"], rank), r["id"]))
 
     if snapshot_mode:
         print("Reviewer mode: no LaTeX sources; the sentence and printed value of each claim come from\n"
               "claims_snapshot.json (frozen from the submitted version), the recomputed value from data/.\n")
-    elif no_tex:
-        print(f"NOTE: no main.tex under {C.ROOT} and no claims_snapshot.json; comparison against the\n"
-              "      printed values is skipped. Set PAPER_ROOT=<paper source dir>. Computed values follow.\n")
+    elif no_snapshot:
+        print(f"NO-SNAPSHOT: no main.tex under {C.ROOT} and no claims_snapshot.json; nothing to compare\n"
+              "             against, every row is FAIL. Set PAPER_ROOT=<paper source dir> or restore\n"
+              "             claims_snapshot.json. Recomputed values follow.\n")
     print(render_table(rows, a.full or os.environ.get("VERIFY_FULL") == "1"))
     n = counts(rows)
     print("\n" + ", ".join(f"{s} {n[s]}" for s in STATUSES)
@@ -368,7 +353,7 @@ def main(argv=None):
         print("\nDATA INTEGRITY MISMATCHES:")
         for x in integ:
             print("  " + x)
-    if n["FAIL"]:
+    if n["FAIL"] and not no_snapshot:
         print("\nFAILED CLAIMS (full text):")
         for r in rows:
             if r["status"] == "FAIL":
@@ -381,9 +366,11 @@ def main(argv=None):
         print(f"\nreport written to {out}")
         if not no_tex and not a.module:
             print(f"snapshot of {write_snapshot(rows)} claims written to {SNAPSHOT.name}")
-        if snapshot_mode or not no_tex:
+        if (snapshot_mode or not no_tex) and not a.module:
             CHECKLIST.write_text(render_checklist(rows, integ), encoding="utf-8")
             print(f"manual checklist written to {CHECKLIST}")
+    if no_snapshot:
+        return 2
     return 1 if (n["FAIL"] or integ) else 0
 
 

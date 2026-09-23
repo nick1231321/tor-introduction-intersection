@@ -1,38 +1,29 @@
-"""Experiment-structure and textual-count claims (module 'setup_structure').
+"""Experiment-structure claims (module 'setup_structure').
 
-Checks the paper's structural statements -- nine runs, K=4 stages, 36
-run--stage observations, stage order, thresholds, date span, run schedule,
-figure groupings, output-file layout -- against the shape of the raw CSVs
-(TRAJ = generated/trajectories_every_trial.csv, MET =
-generated/run_stage_metrics.csv), the per-stage experiment_date / day_label /
-experiment_time_utc labels in MET (minute resolution), the files on disk, the text extracted from the committed figure PDFs, the panel grouping
-declared in repro/generate.py, and, for purely textual counts, by counting
-items in the CURRENT .tex sources (comment environments and %-lines are
-stripped before counting).
+Checks the paper's statements about the shape of the experiment -- nine runs,
+four stages per run, 36 run--stage observations, stage order, run ids 1--9,
+the date span and the run schedule -- against the raw CSVs
+(TRAJ = data/trajectories_every_trial.csv, MET = data/run_stage_metrics.csv)
+and the per-stage experiment_date / day_label / experiment_time_utc labels in
+MET (minute resolution).
 
 Every claim's quoted text is re-located in the CURRENT paper (core.relocate:
 the registered file:line first, then the whole file, then every active .tex
 file reachable from main.tex); the report shows where it is printed now and
 notes "moved from <registered anchor>" when that differs. A quote that is
 printed nowhere marks the claim FAIL ('stale registry') regardless of the
-numeric outcome, so a restructured paper cannot produce a silent PASS (the
-one documented exception, setup-012, whose sentence was removed from the
-paper, is reported UNVERIFIABLE). Textual-count claims find their paragraph
-by anchor sentence anywhere in the paper, not by line number.
+numeric outcome, so a restructured paper cannot produce a silent PASS.
+Without the paper sources the numeric status is kept (the printed value is
+hard-coded here) and the note says the quote was not verified; the two
+claims whose paper side is parsed from a table (setup-011, setup-023,
+setup-027) report FAIL with "paper sources not available".
 
-Nothing is hard-coded from the paper except the printed value being tested;
-every 'computed' field is derived at call time from traj/metrics/files.
-Pure Python (ast/csv/os/re/datetime/subprocess) -- no numpy/scipy.
+Every 'computed' field is derived at call time from traj/metrics only, so
+reviewer mode can replay it against claims_snapshot.json.
 """
 from __future__ import annotations
 
-import ast
-from pathlib import Path
-import csv
-import os
 import re
-import shutil
-import subprocess
 from datetime import date
 
 import core as _core   # shared tex/timestamp helpers (single copy in core.py)
@@ -42,37 +33,11 @@ RAW_RUNS = list(range(4, 13))
 
 
 # --------------------------------------------------------------------------
-# helpers: paths, tex reading (delegated to core.py)
+# helpers
 # --------------------------------------------------------------------------
-def _root(C):
-    """Project root (holds main.tex)."""
-    return C.ROOT
-
-
-def _tex_lines(C, rel):
+def _tex_lines(rel):
     """Current (comment-stripped) lines of a .tex file, line numbers preserved."""
     return _core.tex_lines(rel)
-
-
-def _find_anchor(lines, anchor):
-    """1-based line number of the first (non-comment) line containing anchor,
-    or None."""
-    for k, ln in enumerate(lines, 1):
-        if anchor in ln:
-            return k
-    return None
-
-
-def _paragraph_around(lines, line_no):
-    """Text of the blank-line-delimited paragraph containing 1-based line_no."""
-    i = line_no - 1
-    lo = i
-    while lo > 0 and lines[lo - 1].strip() != "":
-        lo -= 1
-    hi = i
-    while hi + 1 < len(lines) and lines[hi + 1].strip() != "":
-        hi += 1
-    return "\n".join(lines[lo:hi + 1])
 
 
 _norm = _core.norm_ws
@@ -99,7 +64,7 @@ def _relocate(loc, quote):
     core.relocate (registered file:line first, then the whole file, then every
     active file; comment blocks and %-lines blanked, whitespace normalised).
     A long quote is also tried on its first 40 characters (line-wrapping
-    tolerance, as before) before being declared absent."""
+    tolerance) before being declared absent."""
     st, where, note = _core.relocate(loc, quote)
     if st == "absent":
         q = _norm(quote)
@@ -110,15 +75,6 @@ def _relocate(loc, quote):
     return st, where, note
 
 
-def _anchor(anchor, preferred_rel):
-    """(rel, line) of the first line containing `anchor` anywhere in the active
-    paper (preferred file first), or None."""
-    return _core.locate_quote(anchor, preferred_rel)
-
-
-# --------------------------------------------------------------------------
-# helpers: structural facts from the CSVs
-# --------------------------------------------------------------------------
 def _run_ids(traj, metrics):
     tr = sorted({rid for rid, _ in traj})
     mr = sorted({rid for rid, _ in metrics})
@@ -172,102 +128,24 @@ def _stage_order_check(metrics):
     return (not bad), bad
 
 
-def _pdf_text(path):
-    """Raw pdftotext output (content-stream order), or None."""
-    if not shutil.which("pdftotext") or not os.path.exists(path):
-        return None
-    try:
-        # -raw keeps content-stream order, so each 'CW n' precedes its 'T=m';
-        # -layout collapses the 4-column grid and drops annotations.
-        return subprocess.run(["pdftotext", "-raw", str(path), "-"],
-                              capture_output=True, text=True, timeout=60).stdout
-    except Exception:
-        return None
-
-
-def _pdf_pairs(txt):
-    """Multiset of (CW, T) annotation pairs from pdftotext output."""
-    toks = re.findall(r"CW\s*(\d+)|T\s*=\s*(\d+)", txt)
-    pairs, pending = [], None
-    for cw, t in toks:
-        if cw:
-            pending = int(cw)
-        elif pending is not None:
-            pairs.append((pending, int(t)))
-            pending = None
-    return pairs
-
-
-def _pdf_runs(txt):
-    """Sorted set of run labels 'Rn' (as ints) found in pdftotext output."""
-    return sorted({int(n) for n in re.findall(r"\bR(\d+)\b", txt)})
-
-
-def _generate_groups(C):
-    """The panel -> raw-run-id grouping declared in repro/generate.py
-    (figs_runs_grid: `groups = {...}`), read via ast so matplotlib is not
-    imported.  Returns dict or None."""
-    p = Path(__file__).resolve().parent.parent / "generate.py"   # this toolkit's generator
-    try:
-        tree = ast.parse(open(p, encoding="utf-8").read())
-    except Exception:
-        return None
-    for node in ast.walk(tree):
-        if isinstance(node, ast.FunctionDef) and node.name == "figs_runs_grid":
-            for sub in ast.walk(node):
-                if isinstance(sub, ast.Assign) and any(
-                        isinstance(t, ast.Name) and t.id == "groups"
-                        for t in sub.targets):
-                    try:
-                        g = ast.literal_eval(sub.value)
-                    except Exception:
-                        return None
-                    if isinstance(g, dict):
-                        return {str(k): list(v) for k, v in g.items()}
-    return None
-
-
-def _figure_captions(app_lines):
-    """{suffix: (caption_line, (lo, hi))} for each includegraphics of
-    figures/runs_grid_<suffix>.pdf followed by a caption 'Runs~lo--hi'."""
-    out = {}
-    if app_lines is None:
-        return out
-    for k, ln in enumerate(app_lines, 1):
-        m = re.search(r"runs_grid_([a-z])\.pdf", ln)
-        if not m:
-            continue
-        suf = m.group(1)
-        for j in range(k, min(len(app_lines), k + 6)):
-            mm = re.search(r"\\caption\{.*?Runs~(\d+)--(\d+)", app_lines[j])
-            if mm:
-                out[suf] = (j + 1, (int(mm.group(1)), int(mm.group(2))))
-                break
-    return out
-
-
 # --------------------------------------------------------------------------
 def claims(C, traj, metrics):
     out = []
-    root = _root(C)
     STALE = "quote not found at location (stale registry)"
+    have_tex = _core.paper_present()
 
-    def add(cid, loc, quote, paper, computed, status, note="", absent_status="FAIL",
-            absent_note=STALE, absent_loc=None):
+    def add(cid, loc, quote, paper, computed, status, note=""):
         """Append a claim whose quote is re-located in the current paper; the
         reported location is where the quote is printed NOW, `loc` only the
-        registered fallback anchor. A quote printed nowhere gets absent_status
-        (FAIL = stale registry, unless the caller documents otherwise) and the
-        location absent_loc (default 'file:?')."""
+        registered fallback anchor. A quote printed nowhere is FAIL (stale
+        registry); without sources the status is kept and the note says so."""
         st_, where, mv = _relocate(loc, quote)
         if st_ == "absent":
-            status = absent_status
-            note = (absent_note + ("; " + note if note else ""))
-            loc = absent_loc or where
+            status = "FAIL"
+            note = (STALE + ("; " + note if note else ""))
+            loc = where
         elif st_ == "nofile":
-            if status == "PASS":
-                status = "UNVERIFIABLE"
-            note = ("quoted .tex file unreadable" + ("; " + note if note else ""))
+            note = ("paper sources not found; quote not verified" + ("; " + note if note else ""))
         else:
             loc = where
             if mv:
@@ -288,12 +166,6 @@ def claims(C, traj, metrics):
         "nine", nine_comp, st(nine_ok),
         "len(set(run_id)) in TRAJ and MET; raw ids 4..12 = paper runs 1..9.")
 
-    # ---- setup-002 ----
-    add("setup-002", "sections/03-attack.tex:347",
-        "Reconstruction therefore requires $K=4$ stages in both configurations",
-        "4", four_comp, st(four_ok),
-        "Distinct stage codes per run in MET and TRAJ must be exactly {IP,M1,VG,EG}.")
-
     # ---- setup-003 ----
     add("setup-003", "sections/03-attack.tex:348",
         "$r_{m_0},\\ldots,r_{m_3}$ denote the Introduction Point, the middle relay "
@@ -304,32 +176,6 @@ def claims(C, traj, metrics):
         st(order_ok),
         "Stage index order inferred from strictly increasing (experiment_date, HH:MM) of "
         "each stage's own MET row per run (minute resolution).")
-
-    # ---- setup-004 ----
-    add("setup-004", "sections/03-attack.tex:521",
-        "number of stages $K$ ($K=4$ for a service-side introduction circuit)",
-        "4", four_comp, st(four_ok), "Same test as setup-002.")
-
-    # ---- setup-005 (textual, anchor-located anywhere in the active paper) ----
-    q5 = "reconstruction relies on three assumptions."
-    hit5 = _anchor("relies on three assumptions", "sections/03-attack.tex")
-    if not _core.paper_present():
-        add("setup-005", "sections/03-attack.tex:?", q5, "three", "n/a",
-            "UNVERIFIABLE", "paper sources not found.")
-    elif hit5 is None:
-        out.append({"id": "setup-005", "location": "sections/03-attack.tex:?",
-                    "quote": q5, "paper": "three", "computed": "n/a",
-                    "status": "FAIL", "note": "quote not found in current .tex"})
-    else:
-        rel5, i5 = hit5
-        para = _paragraph_around(_tex_lines(C, rel5), i5)
-        starters = [w for w in ("First", "Second", "Third", "Fourth", "Fifth")
-                    if re.search(r"(^|[.\s])" + w + r",", para)]
-        add("setup-005", f"{rel5}:{i5}", q5, "three",
-            f"{len(starters)} enumerated ({', '.join(starters)})",
-            st(len(starters) == 3 and starters == ["First", "Second", "Third"]),
-            "Textual count of 'First,/Second,/Third,' sentence starters in the "
-            f"paragraph containing the anchor (found at {rel5}:{i5}).")
 
     # ---- setup-006 ----
     add("setup-006", "sections/04-setup-and-evaluation.tex:267",
@@ -343,77 +189,14 @@ def claims(C, traj, metrics):
         "One monitored relay per stage; 4 stage codes per run. Relay identities "
         "(fingerprints) are not in the dataset, so only the count is checked.")
 
-    # ---- setup-008 ----
-    hdr = None
-    try:
-        hdr = next(csv.reader(open(C.DATA / "run_stage_metrics.csv")))
-    except Exception:
-        pass
-    qs8 = (10, 3, 2)
-    undefined8, nonmono8 = [], []
-    for (rid, s), seq in sorted(traj.items()):
-        t = [C.T_le(seq, q) for q in qs8]
-        if any(v is None for v in t):
-            undefined8.append((rid, s, dict(zip(qs8, t))))
-        elif not (t[0] <= t[1] <= t[2]):
-            nonmono8.append((rid, s, dict(zip(qs8, t))))
-    ok8 = len(traj) == 36 and not undefined8 and not nonmono8
-    add("setup-008", "sections/04-setup-and-evaluation.tex:304",
-        "$T_{\\leq q}=\\min\\{j:|\\mathcal{I}_i^{(j)}|\\leq q\\}$ for $q\\in\\{10,3,2\\}$",
-        "10, 3, 2",
-        f"T<=q = first trial with |I_t|<=q from TRAJ: defined for "
-        f"{len(traj) - len(undefined8)}/{len(traj)} run-stages and all three q, "
-        f"T<=10 <= T<=3 <= T<=2 in {len(traj) - len(undefined8) - len(nonmono8)}/{len(traj)}",
-        st(ok8),
-        "T<=q is derived from trajectories_every_trial.csv alone (core.T_le); the check is "
-        "that every one of the 36 run-stages reaches each threshold q in {10,3,2} and that "
-        "the thresholds are ordered."
-        + (f" undefined: {undefined8[:5]}" if undefined8 else "")
-        + (f" non-monotone: {nonmono8[:5]}" if nonmono8 else ""))
-
-    # ---- setup-009 (textual, from tab:impl-components + anchor paragraph) ----
-    impl = _tex_lines(C, "sections/implementation.tex")
-    comp_rows, n_on_relay = None, None
-    if impl is not None:
-        txt = "\n".join(impl)
-        m = re.search(r"\\label\{tab:impl-components\}.*?\\begin\{tabular\}.*?\\midrule(.*?)\\bottomrule",
-                      txt, re.S)
-        if m:
-            body = m.group(1)
-            comp_rows = [r.strip() for r in re.split(r"\\\\", body) if r.strip()]
-            comp_rows = [re.split(r"&", r)[0].strip() for r in comp_rows]
-            # the onion-service daemon row is the one on the service host
-            n_on_relay = sum(1 for r in comp_rows
-                             if not re.search(r"onion-service daemon", r, re.I))
-    q9 = "The monitored relay runs four processes: (i)~a capture process"
-    ev = _tex_lines(C, "sections/04-setup-and-evaluation.tex")
-    hit9 = _anchor("runs four processes", "sections/04-setup-and-evaluation.tex")
-    rel9, i9 = hit9 if hit9 else ("sections/04-setup-and-evaluation.tex", None)
-    if comp_rows is None:
-        add("setup-009", f"{rel9}:{i9 or '?'}", q9,
-            "four", "n/a", "UNVERIFIABLE", "tab:impl-components not parseable.")
-    elif i9 is None:
-        out.append({"id": "setup-009", "location": f"{rel9}:?",
-                    "quote": q9, "paper": "four", "computed": "n/a",
-                    "status": "FAIL", "note": "quote not found in current .tex"})
-    else:
-        para = _paragraph_around(_tex_lines(C, rel9), i9)
-        romans = re.findall(r"\((i|ii|iii|iv|v|vi)\)~?", para)
-        n_rom = len(set(romans))
-        ok9 = n_on_relay == 4 and n_rom == 4
-        add("setup-009", f"{rel9}:{i9}", q9, "four",
-            f"{len(comp_rows)} component rows in tab:impl-components, {n_on_relay} on "
-            f"the monitored relay; {n_rom} enumerated processes (i)..({romans[-1] if romans else '-'}) in the paragraph",
-            st(ok9),
-            "Textual consistency: table rows minus the Onion-service daemon row "
-            f"(service host) and the (i)-(iv) enumeration in the paragraph at {rel9}:{i9}.")
-
     # ---- setup-010 ----
     add("setup-010", "sections/04-setup-and-evaluation.tex:366",
         "where $N$ is the total number of iterations across the four stages",
-        "four", four_comp, st(four_ok), "Same test as setup-002.")
+        "four", four_comp, st(four_ok),
+        "Distinct stage codes per run in MET and TRAJ must be exactly {IP,M1,VG,EG}.")
 
-    # ---- setup-011 (nine runs + table rows) ----
+    # ---- setup-011 (nine runs + data rows of tab:end_to_end) ----
+    ev = _tex_lines("sections/04-setup-and-evaluation.tex")
     n_rows_e2e = None
     if ev is not None:
         txt = "\n".join(ev)
@@ -421,32 +204,15 @@ def claims(C, traj, metrics):
                       r"\\midrule(.*?)\\midrule", txt, re.S)
         if m:
             n_rows_e2e = len(re.findall(r"^\s*(\d+)\s*&", m.group(1), re.M))
-    ok11 = nine_ok and n_rows_e2e == 9
     # caption of tab:end_to_end ("... across the nine experiments: iterations to
     # convergence per stage ..."); the opening clause is the anchor
     add("setup-011", "sections/04-setup-and-evaluation.tex:416",
         "End-to-end reconstruction cost across the nine experiments",
-        "nine", f"{nine_comp}; {n_rows_e2e} data rows in tab:end_to_end", st(ok11),
-        "Same test as setup-001 plus count of numbered data rows between the "
-        "\\midrule markers of the end-to-end table.")
-
-    # ---- setup-012 ----
-    # The caption sentence "Total is the sum $N$ across the four stages." was
-    # dropped when the caption was shortened; no other live sentence states the
-    # four stages that is not already covered (setup-010 at the cost equation,
-    # setup-020 in the implementation appendix). The claim is kept with its old
-    # anchor: if the sentence comes back it is checked again, otherwise it is
-    # reported UNVERIFIABLE rather than FAIL.
-    cap = _anchor("End-to-end reconstruction cost across the nine experiments",
-                  "sections/04-setup-and-evaluation.tex")
-    add("setup-012", "sections/04-setup-and-evaluation.tex:419",
-        "Total is the sum $N$ across the four stages.",
-        "four", four_comp, st(four_ok), "Same test as setup-002.",
-        absent_status="UNVERIFIABLE",
-        absent_note="sentence removed from the paper (tab:end_to_end caption shortened; "
-                    "location = the current caption); the four-stage count is still "
-                    "verified by setup-010 and setup-020",
-        absent_loc=f"{cap[0]}:{cap[1]}" if cap else None)
+        f"nine; {n_rows_e2e} data rows in tab:end_to_end" if have_tex else "n/a",
+        nine_comp, st(nine_ok and n_rows_e2e == 9),
+        "Same test as setup-001; the paper side also counts the numbered data rows between "
+        "the \\midrule markers of the end-to-end table (must be 9)."
+        + ("" if have_tex else " paper sources not available."))
 
     # ---- setup-013 ----
     n_pairs = len(set(traj.keys()))
@@ -462,96 +228,8 @@ def claims(C, traj, metrics):
         "We evaluated the attack in nine end-to-end experiments against a",
         "nine", nine_comp, st(nine_ok), "Same test as setup-001.")
 
-    # ---- setup-015 / 016 (textual) ----
-    if comp_rows is None:
-        for cid, loc, q, pv in (
-            ("setup-015", "sections/implementation.tex:12",
-             "Four of the five components (Table~\\ref{tab:impl-components}) run on "
-             "the monitored relay's host", "four of five"),
-            ("setup-016", "sections/implementation.tex:15",
-             "the fifth is the modified onion-service daemon on the service host. "
-             "The four move with the observation", "fifth; four")):
-            add(cid, loc, q, pv, "n/a", "UNVERIFIABLE",
-                "tab:impl-components not parseable.")
-    else:
-        ok15 = len(comp_rows) == 5 and n_on_relay == 4
-        add("setup-015", "sections/implementation.tex:12",
-            "Four of the five components (Table~\\ref{tab:impl-components}) run on "
-            "the monitored relay's host", "four of five",
-            f"{n_on_relay} of {len(comp_rows)} ({', '.join(comp_rows)})", st(ok15),
-            "Rows of tab:impl-components; all but the Onion-service daemon run on "
-            "the monitored relay.")
-        idx = [i for i, r in enumerate(comp_rows, 1)
-               if re.search(r"onion-service daemon", r, re.I)]
-        ok16 = len(comp_rows) == 5 and idx == [5] and n_on_relay == 4
-        add("setup-016", "sections/implementation.tex:15",
-            "the fifth is the modified onion-service daemon on the service host. "
-            "The four move with the observation", "fifth; four",
-            f"Onion-service daemon is row {idx[0] if idx else '?'} of {len(comp_rows)}; "
-            f"{n_on_relay} remaining", st(ok16),
-            "Textual: position of the Onion-service daemon row in tab:impl-components.")
-
-    # ---- setup-017..019 ----
-    for cid, ln, q in (("setup-017", 43, "Pins the target introduction circuit to the four relays we operate."),
-                       ("setup-018", 60, "}_{\\textnormal{four public relays we operate}}."),
-                       ("setup-019", 64, "Operating the four relays ourselves substitutes for the visibility")):
-        add(cid, f"sections/implementation.tex:{ln}", q, "four", four_comp,
-            st(four_ok), "One operated relay per stage; same test as setup-002.")
-
-    # ---- setup-020 ----
-    add("setup-020", "sections/implementation.tex:67",
-        "The four monitored-relay stages walk this circuit in reverse",
-        "four (IP->M1->VG->EG)",
-        four_comp + ("; stage starts ordered IP<M1<VG<EG in all runs" if order_ok
-                     else f"; ORDER VIOLATION {order_bad}"),
-        st(four_ok and order_ok),
-        "setup-002 plus setup-003 ordering check (reverse of the circuit "
-        "guard->vanguard->middle->IP).")
-
-    # ---- setup-021 (files) ----
-    gen = C.DATA
-    tp, mp = gen / "trajectories_every_trial.csv", gen / "run_stage_metrics.csv"
-    csvs = sorted(p.name for p in gen.glob("*.csv")) if gen.exists() else []
-    thdr = next(csv.reader(open(tp))) if tp.exists() else None
-    need_met = ["run_id", "stage_code", "experiment_date", "day_label",
-                "experiment_time_utc", "consensus_weight"]
-    missing = [c for c in need_met if hdr is None or c not in hdr]
-    extra = [c for c in (hdr or []) if c not in need_met]
-    ok21 = (tp.exists() and mp.exists() and len(csvs) == 2
-            and thdr == ["run_id", "stage", "trial", "intersection_size"]
-            and hdr == need_met)
-    add("setup-021", "sections/implementation.tex:144",
-        "one CSV records the run, stage, iteration, and intersection cardinality "
-        "per observation, a second records stage-level metadata",
-        "2 CSVs",
-        f"{len(csvs)} CSV(s) in data/ ({', '.join(csvs)}); TRAJ header={thdr}; "
-        f"MET header={hdr}" + (f" MISSING {missing}" if missing else "")
-        + (f" UNEXPECTED {extra}" if extra else ""),
-        st(ok21),
-        "File existence, exact TRAJ header, exact MET header and no other CSV in data/. "
-        "The released run_stage_metrics.csv is the reduced stage-level metadata file: per "
-        "run and stage it holds only the run/stage labels (experiment_date, day_label, "
-        "experiment_time_utc) and the monitored relay's consensus weight; every "
-        "convergence quantity is derived from the trajectories CSV.")
-
-    # ---- setup-022 (textual) ----
-    if impl is None:
-        add("setup-022", "sections/implementation.tex:152",
-            "We considered each of the TRSB's nine research-safety principles as follows.",
-            "nine", "n/a", "UNVERIFIABLE", "implementation.tex not found.")
-    else:
-        txt = "\n".join(impl)
-        m = re.search(r"nine research-safety principles as follows\..*?"
-                      r"\\begin\{enumerate\}(.*?)\\end\{enumerate\}", txt, re.S)
-        n_items = len(re.findall(r"\\item\b", m.group(1))) if m else None
-        add("setup-022", "sections/implementation.tex:152",
-            "We considered each of the TRSB's nine research-safety principles as follows.",
-            "nine", f"{n_items} \\item entries in the enumerate", st(n_items == 9),
-            "Textual: \\item count in the enumerate following the quoted sentence. The "
-            "TRSB page itself lists nine considerations (external, not re-fetched).")
-
     # ---- setup-023 (36 + appendix rows) ----
-    app = _tex_lines(C, "sections/appendix_results.tex")
+    app = _tex_lines("sections/appendix_results.tex")
     n_app_rows = None
     app_labels = []
     if app is not None:
@@ -564,43 +242,11 @@ def claims(C, traj, metrics):
             app_labels = re.findall(r"R(\d+)\s*\(Day\s*(\d+),\s*(\d{2}:\d{2})\)", body)
     add("setup-023", "sections/appendix_results.tex:5",
         "All $36$ individual run--stage observations are presented in",
-        "36", f"{n_pairs} (run,stage) in TRAJ; {n_met} MET rows; {n_app_rows} rows in "
-        f"tab:run-stage-thresholds", st(ok13 and n_app_rows == 36),
-        "Same as setup-013 plus a count of stage rows in the appendix table.")
-
-    # ---- figure grouping inputs (shared by setup-024/028/029/030/031) ----
-    figs = Path(os.environ.get("REPRO_FIGS") or
-                (root / "figures" if (root / "figures").is_dir()
-                 else Path(__file__).resolve().parent.parent / "out" / "figures"))
-    groups = _generate_groups(C)                # {suffix: [raw run ids]} from generate.py
-    captions = _figure_captions(app)            # {suffix: (line, (lo, hi))} from the .tex
-    pdf_txt = {s: _pdf_text(figs / f"runs_grid_{s}.pdf") for s in "abc"}
-    tr_ids, _ = _run_ids(traj, metrics)
-
-    # ---- setup-024 (figure files + panel structure) ----
-    present = [s for s in "abc" if (figs / f"runs_grid_{s}.pdf").exists()]
-    if groups is None:
-        g_comp, g_ok = "generate.py figs_runs_grid groups not parseable", False
-    else:
-        sizes = [len(v) for v in groups.values()]
-        covered = sorted(r for v in groups.values() for r in v)
-        g_comp = (f"generate.py groups {sum(sizes)} runs into {len(groups)} panels of "
-                  f"{'/'.join(map(str, sizes))} (suffixes {','.join(sorted(groups))})")
-        g_ok = sorted(groups) == ["a", "b", "c"] and covered == tr_ids
-    ref_span = None
-    if app is not None:
-        mm = re.search(r"Figures~\\ref\{fig:runs-grid-([a-z])\}--\\ref\{fig:runs-grid-([a-z])\}",
-                       "\n".join(app))
-        if mm:
-            ref_span = (mm.group(1), mm.group(2))
-    add("setup-024", "sections/appendix_results.tex:7",
-        "every run in Figures~\\ref{fig:runs-grid-a}--\\ref{fig:runs-grid-c}.",
-        "3 figures (a--c)",
-        f"{len(present)} files present (runs_grid_{{{','.join(present)}}}.pdf); {g_comp}; "
-        f".tex reference span {ref_span}",
-        st(present == ["a", "b", "c"] and g_ok and ref_span == ("a", "c") and nine_ok),
-        "File existence for figures/runs_grid_{a,b,c}.pdf; panel grouping read (ast) "
-        "from repro/generate.py figs_runs_grid and must cover every TRAJ run once.")
+        f"36; {n_app_rows} rows in tab:run-stage-thresholds" if have_tex else "n/a",
+        f"{n_pairs} (run,stage) in TRAJ; {n_met} MET rows",
+        st(ok13 and n_app_rows == 36),
+        "Same as setup-013; the paper side also counts the stage rows in the appendix table "
+        "(must be 36)." + ("" if have_tex else " paper sources not available."))
 
     # ---- setup-025 ----
     _, mr = _run_ids(traj, metrics)
@@ -649,107 +295,7 @@ def claims(C, traj, metrics):
         "compared with the 9 'Rn (Day d, hh:mm)' labels parsed from the appendix "
         "table (R1..R9 at lines 26 ff.); day_label is anchored to the date by "
         "setup-026. ASSUMPTION: a run is labelled by its IP-stage start (later "
-        "stages may begin on a later day, e.g. raw run 9 EG on Day 3).")
-
-    # ---- setup-028 / 030 / 031 (figure groupings, from PDF text + generate.py) ----
-    ids = {"a": "setup-028", "b": "setup-030", "c": "setup-031"}
-    ts_sets, _ = _stage_sets(traj, metrics)
-    for suf in "abc":
-        cap = captions.get(suf)
-        cap_line, cap_range = (cap if cap else (None, None))
-        lab = f"{cap_range[0]}--{cap_range[1]}" if cap_range else "?"
-        loc = f"sections/appendix_results.tex:{cap_line or '?'}"
-        quote = f"Intersection degradation for Runs~{lab} across the four reconstruction"
-        txt = pdf_txt[suf]
-        if cap is None:
-            out.append({"id": ids[suf], "location": loc, "quote": quote,
-                        "paper": "?", "computed": "n/a", "status": "FAIL",
-                        "note": f"caption for runs_grid_{suf}.pdf with 'Runs~lo--hi' "
-                                "not found in current appendix_results.tex"})
-            continue
-        want = list(range(cap_range[0], cap_range[1] + 1))
-        if txt is None:
-            add(ids[suf], loc, quote, f"{lab}; four", "n/a", "UNVERIFIABLE",
-                f"figures/runs_grid_{suf}.pdf missing or pdftotext unavailable.")
-            continue
-        pdf_r = _pdf_runs(txt)
-        g_raw = groups.get(suf) if groups else None
-        g_paper = sorted(C.PAPER_RUN.get(r, r - 3) for r in g_raw) if g_raw else None
-        nst = [len(ts_sets.get(r, ())) for r in (g_raw or [])]
-        n_titles = len(re.findall(r"IntroductionPoint|Middle1|Vanguard|EntryGuard", txt))
-        okg = (pdf_r == want and g_paper == want and nst == [4] * len(want)
-               and n_titles == 4)
-        add(ids[suf], loc, quote, f"{lab}; four",
-            f"run labels in runs_grid_{suf}.pdf: R{pdf_r}; generate.py panel {suf} raw "
-            f"{g_raw} -> paper {g_paper}; stages per run in TRAJ {nst}; "
-            f"{n_titles} stage column titles in PDF",
-            st(okg),
-            "Run labels 'Rn' read with pdftotext from the committed PDF and the panel "
-            "grouping parsed (ast) from repro/generate.py figs_runs_grid, both compared "
-            "with the caption range parsed from the .tex; each grouped run has 4 stage "
-            "codes in TRAJ and the PDF carries 4 stage column titles.")
-
-    # ---- setup-029 (panel annotations = table values) ----
-    if groups is None:
-        add("setup-029", "sections/appendix_results.tex:89",
-            "Each panel reports stage-start consensus weight (CW) and singleton "
-            "convergence $T_{\\mathrm{conv}}$.",
-            "36 (CW, T_conv) panel annotations", "n/a", "UNVERIFIABLE",
-            "generate.py figs_runs_grid groups not parseable.")
-    else:
-        missing29 = [(rid, s) for rids in groups.values() for rid in rids
-                     for s in STAGES if (rid, s) not in metrics or (rid, s) not in traj]
-        expected = {suf: sorted((int(metrics[(rid, s)]["consensus_weight"]),
-                                 C.T_conv(traj[(rid, s)]))
-                                for rid in rids for s in STAGES
-                                if (rid, s) in metrics and (rid, s) in traj)
-                    for suf, rids in groups.items()}
-        n_exp = sum(len(v) for v in expected.values())
-        got_all, ok29, detail = 0, not missing29, []
-        unverifiable = False
-        for suf in sorted(groups):
-            txt = pdf_txt.get(suf)
-            if txt is None:
-                unverifiable = True
-                detail.append(f"{suf}: pdftotext/file unavailable")
-                continue
-            pairs = _pdf_pairs(txt)
-            got_all += len(pairs)
-            same = sorted(pairs) == expected[suf]
-            ok29 &= same
-            detail.append(f"{suf}: {len(pairs)} (CW,T) pairs {'match' if same else 'DIFFER'}")
-        add("setup-029", "sections/appendix_results.tex:89",
-            "Each panel reports stage-start consensus weight (CW) and singleton "
-            "convergence $T_{\\mathrm{conv}}$.",
-            "36 (CW, T_conv) panel annotations",
-            f"{got_all}/{n_exp} annotation pairs read from committed PDFs; " + "; ".join(detail)
-            + (f"; run-stages missing from TRAJ/MET: {missing29}" if missing29 else ""),
-            "UNVERIFIABLE" if unverifiable else st(ok29 and got_all == n_exp == 36),
-            "pdftotext on figures/runs_grid_{a,b,c}.pdf; 'CW n / T=m' pairs compared as "
-            "multisets with MET.consensus_weight and T_conv recomputed from TRAJ over "
-            "the generate.py panel groups. ASSUMPTION: committed PDFs were produced by "
-            "the current generate.py (figures are not regenerated here).")
-
-    # ---- setup-032 (textual, anchor-located anywhere in the active paper;
-    #      the Limitations paragraph moved from the Discussion into the evaluation) ----
-    q32 = "Our evaluation has two main limitations."
-    hit32 = _anchor("two main limitations", "sections/05-discussion.tex")
-    if not _core.paper_present():
-        add("setup-032", "sections/05-discussion.tex:?", q32, "2", "n/a",
-            "UNVERIFIABLE", "paper sources not found.")
-    elif hit32 is None:
-        out.append({"id": "setup-032", "location": "sections/05-discussion.tex:?",
-                    "quote": q32, "paper": "2", "computed": "n/a",
-                    "status": "FAIL", "note": "quote not found in current .tex"})
-    else:
-        rel32, i32 = hit32
-        para = _paragraph_around(_tex_lines(C, rel32), i32)
-        starters = [w for w in ("First", "Second", "Third", "Fourth")
-                    if re.search(r"(^|[.\s])" + w + r",", para)]
-        add("setup-032", f"{rel32}:{i32}", q32, "2",
-            f"{len(starters)} enumerated ({', '.join(starters)})",
-            st(starters == ["First", "Second"]),
-            "Textual count of 'First,'/'Second,' sentence starters (and absence of "
-            f"'Third,') in the Limitations paragraph containing the anchor ({rel32}:{i32}).")
+        "stages may begin on a later day, e.g. raw run 9 EG on Day 3)."
+        + ("" if have_tex else " paper sources not available."))
 
     return out

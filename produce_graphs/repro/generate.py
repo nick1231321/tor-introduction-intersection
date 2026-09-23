@@ -4,9 +4,6 @@
 Tables are written as \\input-able tabular bodies to repro/out/tables/, figures to
 ../figures/ (the paths the paper references). Numbers come only from the raw data,
 so the paper stays in lockstep with the measurements. Deterministic output.
-
-Artifacts needing the Onionoo snapshot (tor_top15_countries, 14_eyes_probabilities)
-are skipped with a message, since that raw file is not in the project.
 """
 from __future__ import annotations
 import os
@@ -185,5 +182,3 @@ if __name__ == "__main__":
     table_stage_contrasts()
     fig_threshold_summary()
     figs_runs_grid()
-    print("\nNOTE: tor_top15_countries.png and 14_eyes_probabilities.png require the "
-          "raw Onionoo snapshot (not in project) and were not regenerated.")

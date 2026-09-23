@@ -25,8 +25,10 @@ other rows.
 
 Every computed value is derived from the CSVs at call time; nothing is
 hard-coded. Where the paper's wording cannot be reproduced from the CSVs alone
-(e.g. "correct successor", or a count that only matches a table subset) the
-status says so and the note explains the discrepancy.
+(e.g. "correct successor") the note says which part is checked. Every record
+is PASS or FAIL; without the paper sources the numeric status is kept (the
+printed values are hard-coded here) and the note says the quote was not
+verified.
 """
 from __future__ import annotations
 
@@ -99,8 +101,8 @@ def _mk(cid, loc, quote, paper, computed, status, note="", relocate=True):
         elif st == "absent":
             loc, status = where, "FAIL"
             note = f"stale registry: {mv}. " + note
-        else:                       # nofile: keep status; verify.py marks it UNVERIFIABLE
-            note = f"{mv}. " + note
+        else:                       # nofile: keep the numeric status; quote not verified
+            note = f"{mv}; quote not verified. " + note
     return {"id": cid, "location": loc, "quote": quote, "paper": str(paper),
             "computed": str(computed), "status": status, "note": note}
 
@@ -238,7 +240,7 @@ def claims(C, traj, metrics):
           "All $36$ stages\nconverged to the correct successor.",
           "36", _c006,
           "Count of stages converging to a singleton is verified. The 'correct "
-          "successor' part is UNVERIFIABLE from the CSVs (pseudonyms and relay "
+          "successor' part cannot be checked from the CSVs (pseudonyms and relay "
           "identities were never written to disk); it rests on the pinned-path "
           "ground truth described in the text.")
 
@@ -353,7 +355,8 @@ def claims(C, traj, metrics):
         computed = f"{len(group)} {stage_word} stages at CW {cw} in MET [{listing}]"
         if phrase is None:
             out.append(_mk(cid, loc, f"{stage_word} stages at CW ${cw}$", "n/a", computed,
-                           "UNVERIFIABLE", "sentence about CW-matched stages not found in the live text",
+                           "FAIL", ("paper sources not available" if not _core.paper_present() else
+                                    "sentence about CW-matched stages not found in the live text"),
                            relocate=False))
             return
         status = _status(total == len(group))

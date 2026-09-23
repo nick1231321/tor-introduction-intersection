@@ -1,23 +1,5 @@
 [
  {
-  "id": "const-001",
-  "location": "main.tex:70",
-  "quote": "client circuits typically\nlast only about $10$~min",
-  "paper": "10",
-  "computed": "10",
-  "status": "CONSTANT",
-  "note": "CONSTANT: Tor default MaxCircuitDirtiness = 600 s = 10 min (tor(1) manual)."
- },
- {
-  "id": "const-002",
-  "location": "main.tex:74",
-  "quote": "remain fixed for $18$--$24$~h",
-  "paper": "18--24",
-  "computed": "18--24",
-  "status": "CONSTANT",
-  "note": "CONSTANT: Tor rend-spec-v3 / hs_circuit INTRO_POINT_LIFETIME_MIN_SECONDS = 18 h, MAX = 24 h; cited platzer2020critical."
- },
- {
   "id": "setup-001",
   "location": "main.tex:78",
   "quote": "Across nine end-to-end experiments",
@@ -45,60 +27,6 @@
   "note": "median(31*N/3600 over 9 runs) = 2.2389 h (median N = 260); assumes v=0 and 31 s/iteration. N by paper run: 1:382, 2:131, 3:260, 4:152, 5:504, 6:770, 7:211, 8:260, 9:101. [quote verified in current tex]"
  },
  {
-  "id": "const-003",
-  "location": "sections/01-introduction.tex:51",
-  "quote": "enabling millions of users to conceal their sensitive Internet activities",
-  "paper": "millions",
-  "computed": "millions",
-  "status": "CONSTANT",
-  "note": "CONSTANT: Tor Metrics daily-user estimates (~2M directly connecting users); order-of-magnitude cited figure."
- },
- {
-  "id": "const-004",
-  "location": "sections/01-introduction.tex:73",
-  "quote": "For an adversary limited to monitoring one relay at a time",
-  "paper": "one",
-  "computed": "one",
-  "status": "CONSTANT",
-  "note": "CONSTANT: threat-model assumption defined by the paper (sections/03-attack.tex:297)."
- },
- {
-  "id": "const-005",
-  "location": "sections/01-introduction.tex:81",
-  "quote": "typically last at most about $10$~min",
-  "paper": "10",
-  "computed": "10",
-  "status": "CONSTANT",
-  "note": "CONSTANT: Tor default MaxCircuitDirtiness = 600 s = 10 min (tor(1) manual). Cited erdin2015find."
- },
- {
-  "id": "const-006",
-  "location": "sections/01-introduction.tex:93",
-  "quote": "$18$--$24$~h \\cite{platzer2020critical}",
-  "paper": "18--24",
-  "computed": "18--24",
-  "status": "CONSTANT",
-  "note": "CONSTANT: Tor rend-spec-v3 / hs_circuit INTRO_POINT_LIFETIME_MIN_SECONDS = 18 h, MAX = 24 h; cited platzer2020critical."
- },
- {
-  "id": "const-007",
-  "location": "sections/01-introduction.tex:97",
-  "quote": "only one Tor relay at a time an extended window",
-  "paper": "one",
-  "computed": "one",
-  "status": "CONSTANT",
-  "note": "CONSTANT: threat-model assumption defined by the paper (sections/03-attack.tex:297)."
- },
- {
-  "id": "const-008",
-  "location": "sections/01-introduction.tex:106",
-  "quote": "We consider an adversary that monitors one relay at a time, chosen adaptively:",
-  "paper": "one",
-  "computed": "one",
-  "status": "CONSTANT",
-  "note": "CONSTANT: threat-model assumption defined by the paper (sections/03-attack.tex:297)."
- },
- {
   "id": "conv-002",
   "location": "sections/01-introduction.tex:138",
   "quote": "complete target path in all nine experiments (Section~\\ref{sec:eval}).",
@@ -106,96 +34,6 @@
   "computed": "9 of 9 runs converged at all 4 stages (36/36 stages reach |I|=1)",
   "status": "PASS",
   "note": "Same computation as conv-001."
- },
- {
-  "id": "const-009",
-  "location": "sections/02-background.tex:54",
-  "quote": "chosen from a fixed set of four \\emph{layer-2 vanguards},",
-  "paper": "four",
-  "computed": "four",
-  "status": "CONSTANT",
-  "note": "CONSTANT: Tor proposal 333 (Vanguards-Lite) NUM_LAYER2_GUARDS = 4."
- },
- {
-  "id": "const-010",
-  "location": "sections/02-background.tex:55",
-  "quote": "each kept for a random period of $1$--$12$~days.",
-  "paper": "1--12",
-  "computed": "1--12",
-  "status": "CONSTANT",
-  "note": "CONSTANT: Tor proposal 333 layer-2 guard lifetime: min 1 day, max 12 days."
- },
- {
-  "id": "const-011",
-  "location": "sections/02-background.tex:55",
-  "quote": "The optional \\emph{Full\nVanguards} mode also fixes the third relay.",
-  "paper": "third",
-  "computed": "third",
-  "status": "CONSTANT",
-  "note": "CONSTANT: vanguards add-on specification (layer-3 guards pin the third hop)."
- },
- {
-  "id": "const-012",
-  "location": "sections/02-background.tex:67",
-  "quote": "three by default, as its \\emph{Introduction Points} (IntPs).",
-  "paper": "three",
-  "computed": "three",
-  "status": "CONSTANT",
-  "note": "CONSTANT: Tor HiddenServiceNumIntroductionPoints default = 3 (rend-spec-v3)."
- },
- {
-  "id": "const-013",
-  "location": "sections/03-attack.tex:282",
-  "quote": "ordinary Tor circuits are typically used for about $10$~min",
-  "paper": "10",
-  "computed": "10",
-  "status": "CONSTANT",
-  "note": "CONSTANT: Tor default MaxCircuitDirtiness = 600 s = 10 min (tor(1) manual)."
- },
- {
-  "id": "const-014",
-  "location": "sections/03-attack.tex:286",
-  "quote": "for $18$--$24$~h~\\cite{platzer2020critical}",
-  "paper": "18--24",
-  "computed": "18--24",
-  "status": "CONSTANT",
-  "note": "CONSTANT: Tor rend-spec-v3 / hs_circuit INTRO_POINT_LIFETIME_MIN_SECONDS = 18 h, MAX = 24 h; cited platzer2020critical."
- },
- {
-  "id": "const-015",
-  "location": "sections/03-attack.tex:297",
-  "quote": "(iii) observes at most one\nTor relay at a time",
-  "paper": "one",
-  "computed": "one",
-  "status": "CONSTANT",
-  "note": "CONSTANT: threat-model assumption defined by the paper (sections/03-attack.tex:297)."
- },
- {
-  "id": "const-016",
-  "location": "sections/03-attack.tex:339",
-  "quote": "An onion service's introduction circuit consists of four relays",
-  "paper": "four",
-  "computed": "4 distinct stage codes in MET/TRAJ (EG, IP, M1, VG)",
-  "status": "CONSTANT",
-  "note": "CONSTANT: Tor vanguards spec (guard, L2, L3/middle, IntP); structurally mirrored by the distinct stage codes in the data (see setup-003)."
- },
- {
-  "id": "const-017",
-  "location": "sections/03-attack.tex:341",
-  "quote": "service $\\to$ entry guard $\\to$ layer-2\nvanguard $\\to$ middle relay $\\to$ Introduction Point. Under the optional\nFull Vanguards configuration, a layer-3 vanguard replaces the middle\nrelay",
-  "paper": "layer-2 / layer-3",
-  "computed": "layer-2 / layer-3",
-  "status": "CONSTANT",
-  "note": "CONSTANT: Tor proposal 333 (Vanguards-Lite: L2 pinned, middle free) / vanguards add-on (Full Vanguards: L2 and L3 pinned)."
- },
- {
-  "id": "setup-002",
-  "location": "sections/03-attack.tex:347",
-  "quote": "Reconstruction therefore requires $K=4$ stages in both configurations",
-  "paper": "4",
-  "computed": "4 stage codes per run in TRAJ, 4 in MET (codes ['EG', 'IP', 'M1', 'VG'])",
-  "status": "PASS",
-  "note": "Distinct stage codes per run in MET and TRAJ must be exactly {IP,M1,VG,EG}."
  },
  {
   "id": "setup-003",
@@ -207,33 +45,6 @@
   "note": "Stage index order inferred from strictly increasing (experiment_date, HH:MM) of each stage's own MET row per run (minute resolution)."
  },
  {
-  "id": "const-018",
-  "location": "sections/03-attack.tex:399",
-  "quote": "From stage~$1$ onward, $r_{m_i}$ receives the introduction cell from its\npredecessor",
-  "paper": "1",
-  "computed": "1",
-  "status": "CONSTANT",
-  "note": "CONSTANT: algorithm definition (Alg. reconstruction, predecessor-exclusion step); not data-derived. Restated at implementation.tex:101 (const-034)."
- },
- {
-  "id": "const-019",
-  "location": "sections/03-attack.tex:415",
-  "quote": "Tor's general rule against placing two relays from\nthe same \\texttt{/16} subnet on a circuit",
-  "paper": "/16; two",
-  "computed": "/16; two",
-  "status": "CONSTANT",
-  "note": "CONSTANT: Tor path-spec section 2.2 (EnforceDistinctSubnets), relaxed for HS circuits by proposal 333."
- },
- {
-  "id": "const-020",
-  "location": "sections/03-attack.tex:426",
-  "quote": "the adversary builds a new client-side circuit for each iteration",
-  "paper": "one per iteration",
-  "computed": "one per iteration",
-  "status": "CONSTANT",
-  "note": "CONSTANT: implementation description (fresh Tor client per iteration, implementation.tex:32); not recorded in the CSVs."
- },
- {
   "id": "conv-003",
   "location": "sections/03-attack.tex:462",
   "quote": "Stage~$i$ converges at the first iteration $j$\nfor which $|\\mathcal{I}_i^{(j)}|=1$.",
@@ -243,42 +54,6 @@
   "note": "Definition check: in every (run, stage) the first singleton trial is the last recorded trial (recording stops at convergence)."
  },
  {
-  "id": "time-005",
-  "location": "sections/03-attack.tex:477",
-  "quote": "Each window spans a single handshake, lasting approximately one second",
-  "paper": "one second (approx.)",
-  "computed": "appendix-table:1 s",
-  "status": "PASS",
-  "note": "PAPER-INTERNAL, same basis as time-004: mean 0.898 s of the 16 appendix values; raw per-trial data absent. [quote verified in current tex]"
- },
- {
-  "id": "const-021",
-  "location": "sections/03-attack.tex:482",
-  "quote": "after approximately $10$~min in ordinary Tor",
-  "paper": "10",
-  "computed": "10",
-  "status": "CONSTANT",
-  "note": "CONSTANT: Tor default MaxCircuitDirtiness = 600 s = 10 min (tor(1) manual)."
- },
- {
-  "id": "const-022",
-  "location": "sections/03-attack.tex:483",
-  "quote": "population turns over approximately $2.5$ times per\nday~\\cite{jansen2016safely}",
-  "paper": "2.5",
-  "computed": "2.5",
-  "status": "CONSTANT",
-  "note": "CONSTANT: cited jansen2016safely (Safely Measuring Tor, CCS 2016)."
- },
- {
-  "id": "setup-004",
-  "location": "sections/03-attack.tex:520",
-  "quote": "number of stages $K$ ($K=4$ for a service-side introduction circuit)",
-  "paper": "4",
-  "computed": "4 stage codes per run in TRAJ, 4 in MET (codes ['EG', 'IP', 'M1', 'VG'])",
-  "status": "PASS",
-  "note": "Same test as setup-002."
- },
- {
   "id": "conv-004",
   "location": "sections/03-attack.tex:549",
   "quote": "\\If{$|\\mathcal{I}_i| = 0$}",
@@ -286,15 +61,6 @@
   "computed": "min(intersection_size) = 1 over 2771 rows",
   "status": "PASS",
   "note": "Abort branch: an empty intersection never occurred in any recorded trial, so no recorded run aborted (consistent with conv-001)."
- },
- {
-  "id": "setup-005",
-  "location": "sections/03-attack.tex:580",
-  "quote": "reconstruction relies on three assumptions.",
-  "paper": "three",
-  "computed": "3 enumerated (First, Second, Third)",
-  "status": "PASS",
-  "note": "Textual count of 'First,/Second,/Third,' sentence starters in the paragraph containing the anchor (found at sections/03-attack.tex:580)."
  },
  {
   "id": "setup-006",
@@ -315,42 +81,6 @@
   "note": "One monitored relay per stage; 4 stage codes per run. Relay identities (fingerprints) are not in the dataset, so only the count is checked."
  },
  {
-  "id": "ext-001",
-  "location": "sections/04-setup-and-evaluation.tex:278",
-  "quote": "The relays had been active for $69$--$126$ days when the experiments began",
-  "paper": "69--126",
-  "computed": "n/a (no relay first_seen in metrics)",
-  "status": "UNVERIFIABLE",
-  "note": "Needs Onionoo first_seen for the four operated relays; recipe: (2026-01-07 - first_seen).days for each relay, expect min/max = 69--126. Experiment start = min(experiment_date) over run_stage_metrics.csv = 2026-01-07. run_stage_metrics.csv has no fingerprint/first_seen column."
- },
- {
-  "id": "setup-008",
-  "location": "sections/04-setup-and-evaluation.tex:303",
-  "quote": "$T_{\\leq q}=\\min\\{j:|\\mathcal{I}_i^{(j)}|\\leq q\\}$ for $q\\in\\{10,3,2\\}$",
-  "paper": "10, 3, 2",
-  "computed": "T<=q = first trial with |I_t|<=q from TRAJ: defined for 36/36 run-stages and all three q, T<=10 <= T<=3 <= T<=2 in 36/36",
-  "status": "PASS",
-  "note": "T<=q is derived from trajectories_every_trial.csv alone (core.T_le); the check is that every one of the 36 run-stages reaches each threshold q in {10,3,2} and that the thresholds are ordered."
- },
- {
-  "id": "setup-009",
-  "location": "sections/04-setup-and-evaluation.tex:315",
-  "quote": "The monitored relay runs four processes: (i)~a capture process",
-  "paper": "four",
-  "computed": "5 component rows in tab:impl-components, 4 on the monitored relay; 4 enumerated processes (i)..(iv) in the paragraph",
-  "status": "PASS",
-  "note": "Textual consistency: table rows minus the Onion-service daemon row (service host) and the (i)-(iv) enumeration in the paragraph at sections/04-setup-and-evaluation.tex:315."
- },
- {
-  "id": "const-046",
-  "location": "sections/04-setup-and-evaluation.tex:329",
-  "quote": "The controller relaunches the client after $\\delta=30$~s",
-  "paper": "30",
-  "computed": "tex: 30; implementation.tex (const-035 sentence) says 30",
-  "status": "CONSTANT",
-  "note": "CONSTANT: implementation parameter (same as const-035); textual check only that it equals the implementation.tex statement."
- },
- {
   "id": "conv-005",
   "location": "sections/04-setup-and-evaluation.tex:352",
   "quote": "Across the nine end-to-end experiments, the attack successfully\nreconstructed the complete introduction path in every run.",
@@ -366,7 +96,7 @@
   "paper": "36",
   "computed": "36 of 36 stages end at |I|=1",
   "status": "PASS",
-  "note": "Count of stages converging to a singleton is verified. The 'correct successor' part is UNVERIFIABLE from the CSVs (pseudonyms and relay identities were never written to disk); it rests on the pinned-path ground truth described in the text."
+  "note": "Count of stages converging to a singleton is verified. The 'correct successor' part cannot be checked from the CSVs (pseudonyms and relay identities were never written to disk); it rests on the pinned-path ground truth described in the text."
  },
  {
   "id": "conv-007",
@@ -378,49 +108,13 @@
   "note": "N(r) = sum of Tconv (= recorded trials) over the four stages; statistics.median over 9 runs."
  },
  {
-  "id": "time-002",
-  "location": "sections/04-setup-and-evaluation.tex:364",
-  "quote": "T=(31\\,\\mathrm{s})N+4v,",
-  "paper": "31; 4",
-  "computed": "appendix-table:31; 4",
-  "status": "CONSTANT",
-  "note": "31 derived as delta 30 s + round(mean handshake 0.898 s) = 31; core.SECONDS_PER_ITER = 31; 4 = number of stages K = len(core.STAGES) = 4. [quote verified in current tex]"
- },
- {
   "id": "setup-010",
   "location": "sections/04-setup-and-evaluation.tex:366",
   "quote": "where $N$ is the total number of iterations across the four stages",
   "paper": "four",
   "computed": "4 stage codes per run in TRAJ, 4 in MET (codes ['EG', 'IP', 'M1', 'VG'])",
   "status": "PASS",
-  "note": "Same test as setup-002."
- },
- {
-  "id": "time-003",
-  "location": "sections/04-setup-and-evaluation.tex:368",
-  "quote": "The $31$~s iteration cost consists of the $\\delta=30$~s\ndelay between iterations in our experimental setup and approximately $1$~s\nfor the introduction handshake itself.",
-  "paper": "31; 30; 1",
-  "computed": "31; 30; 1",
-  "status": "CONSTANT",
-  "note": "arithmetic 30 + 1 = 31; 30 s is the implementation parameter delta; handshake ~1 s is PAPER-INTERNAL (appendix table, raw per-trial data absent): n=16, mean=0.898 s, median=0.838 s. [quote verified in current tex]"
- },
- {
-  "id": "const-047",
-  "location": "sections/04-setup-and-evaluation.tex:370",
-  "quote": "The $30$~s delay is a configurable\nparameter of our implementation",
-  "paper": "30",
-  "computed": "tex: 30; const-046 sentence says 30; implementation.tex says 30",
-  "status": "CONSTANT",
-  "note": "CONSTANT: implementation parameter; textual check that it equals const-035/046."
- },
- {
-  "id": "time-004",
-  "location": "sections/04-setup-and-evaluation.tex:372",
-  "quote": "approximately $1$~s handshake duration is based on measurements of public\nonion services reported in Appendix~\\ref{app:introduction-latency}",
-  "paper": "1",
-  "computed": "appendix-table:1",
-  "status": "PASS",
-  "note": "PAPER-INTERNAL consistency (appendix table vs. text), not raw data: mean of the 16 printed Avg dt values = 0.898 s, median = 0.838 s, range [0.521, 1.780] s; 'approximately 1 s' = mean rounded to 0 dp. The 160 raw per-trial handshake measurements are not in the repository. [quote verified in current tex]"
+  "note": "Distinct stage codes per run in MET and TRAJ must be exactly {IP,M1,VG,EG}."
  },
  {
   "id": "time-006",
@@ -435,28 +129,10 @@
   "id": "time-007",
   "location": "sections/04-setup-and-evaluation.tex:384",
   "quote": "correspond to approximately $12\\%$ and $37\\%$, respectively, of $18$~h",
-  "paper": "12%; 37%; 18",
-  "computed": "12%; 37%; 18",
+  "paper": "12%; 37%",
+  "computed": "12%; 37%",
   "status": "PASS",
-  "note": "100*2.2389/18 = 12.44; 100*6.6306/18 = 36.84; nearest integer. 18 h is a CONSTANT (lower end of the 18--24 h circuit lifetime). [moved from sections/04-setup-and-evaluation.tex:391] [quote verified in current tex]"
- },
- {
-  "id": "const-023",
-  "location": "sections/04-setup-and-evaluation.tex:385",
-  "quote": "the lower end of the introduction circuit's $18$--$24$~h lifetime",
-  "paper": "18--24",
-  "computed": "18--24",
-  "status": "CONSTANT",
-  "note": "[moved from sections/04-setup-and-evaluation.tex:392] CONSTANT: Tor rend-spec-v3 / hs_circuit INTRO_POINT_LIFETIME_MIN_SECONDS = 18 h, MAX = 24 h; cited platzer2020critical."
- },
- {
-  "id": "const-024",
-  "location": "sections/04-setup-and-evaluation.tex:389",
-  "quote": "reconstruction still completes within $18$~h",
-  "paper": "18",
-  "computed": "18",
-  "status": "CONSTANT",
-  "note": "[moved from sections/04-setup-and-evaluation.tex:396] CONSTANT: definitional; 18 h = lower end of the Tor intro-circuit lifetime (INTRO_POINT_LIFETIME_MIN_SECONDS)."
+  "note": "100*2.2389/18 = 12.44; 100*6.6306/18 = 36.84; nearest integer; 18 h = lower end of the circuit lifetime (model parameter). [moved from sections/04-setup-and-evaluation.tex:391] [quote verified in current tex]"
  },
  {
   "id": "time-008",
@@ -480,8 +156,8 @@
   "id": "time-010",
   "location": "sections/04-setup-and-evaluation.tex:391",
   "quote": "At $v=4$~h, five of the nine runs exceed\nthe $18$~h bound.",
-  "paper": "five of nine; 4; 18",
-  "computed": "5 of 9; 4; 18",
+  "paper": "five of nine",
+  "computed": "5 of 9",
   "status": "PASS",
   "note": "runs with h+16 > 18 (N > 232.26): raw [4, 6, 8, 9, 11] = paper [1, 3, 5, 6, 8]. [moved from sections/04-setup-and-evaluation.tex:398] [quote verified in current tex]"
  },
@@ -507,28 +183,10 @@
   "id": "setup-011",
   "location": "sections/04-setup-and-evaluation.tex:409",
   "quote": "End-to-end reconstruction cost across the nine experiments",
-  "paper": "nine",
-  "computed": "9 runs in TRAJ (raw ids 4..12), 9 in MET; 9 data rows in tab:end_to_end",
+  "paper": "nine; 9 data rows in tab:end_to_end",
+  "computed": "9 runs in TRAJ (raw ids 4..12), 9 in MET",
   "status": "PASS",
-  "note": "[moved from sections/04-setup-and-evaluation.tex:416]; Same test as setup-001 plus count of numbered data rows between the \\midrule markers of the end-to-end table."
- },
- {
-  "id": "setup-012",
-  "location": "sections/04-setup-and-evaluation.tex:409",
-  "quote": "Total is the sum $N$ across the four stages.",
-  "paper": "four",
-  "computed": "4 stage codes per run in TRAJ, 4 in MET (codes ['EG', 'IP', 'M1', 'VG'])",
-  "status": "UNVERIFIABLE",
-  "note": "sentence removed from the paper (tab:end_to_end caption shortened; location = the current caption); the four-stage count is still verified by setup-010 and setup-020; Same test as setup-002."
- },
- {
-  "id": "time-013",
-  "location": "sections/04-setup-and-evaluation.tex:412",
-  "quote": "costs $v$ (bold: exceeds $18$~h).",
-  "paper": "18",
-  "computed": "bold cells: 6; cells with T>18: 6",
-  "status": "PASS",
-  "note": "checked 30 T cells + 10 v_max cells in tab:end_to_end against T=31N/3600+4v; bold <=> T>18; max T at v<=1 is 10.63 h. [moved from sections/04-setup-and-evaluation.tex:421] [quote verified in current tex]"
+  "note": "[moved from sections/04-setup-and-evaluation.tex:416]; Same test as setup-001; the paper side also counts the numbered data rows between the \\midrule markers of the end-to-end table (must be 9)."
  },
  {
   "id": "e2e-001",
@@ -624,8 +282,8 @@
   "id": "contr-body",
   "location": "sections/04-setup-and-evaluation.tex:491",
   "quote": "\\label{tab:stage-contrasts}",
-  "paper": "11 body lines",
-  "computed": "11 body lines from generate.py",
+  "paper": "11 lines, sha1 e9c8820d2742",
+  "computed": "11 lines, sha1 e9c8820d2742",
   "status": "PASS",
   "note": "tabular body of tab:stage-contrasts equals repro/out/tables/stage_contrasts_body.tex (make tables) modulo whitespace"
  },
@@ -855,15 +513,6 @@
   "note": "[moved from sections/05-discussion.tex:52] ASSUMPTION: ratio of medians as in conv-010, 'third iteration' = trial index 3 (|I_3|). Median of per-run ratios gives IP 91.7, M1 92.7, VG 95.3, EG 83.5 and does not reproduce."
  },
  {
-  "id": "ext-002",
-  "location": "sections/04-setup-and-evaluation.tex:535",
-  "quote": "complete in $0.521$--$1.780$~s, depending on the service",
-  "paper": "0.521--1.780",
-  "computed": "0.521--1.780",
-  "status": "PASS",
-  "note": "[moved from sections/05-discussion.tex] Range parsed from sections/04-setup-and-evaluation.tex at run time and compared with the min/max of the 16 Avg dt cells parsed from sections/appendix_time_of_introduction_handshake_completion.tex (min=BMG, max=Black Cloud). Raw per-trial latencies are not in the project, so the means themselves are unverifiable."
- },
- {
   "id": "conv-012",
   "location": "sections/04-setup-and-evaluation.tex:551",
   "quote": "three of the six Vanguard stages at CW $1200$",
@@ -972,78 +621,6 @@
   "note": "[moved from sections/05-discussion.tex:87] Paper runs 3, 5 = raw 6, 8. Plateau = contiguous run of value 3 from T<=3 to Tconv-1; equivalently count(seq==3)."
  },
  {
-  "id": "setup-032",
-  "location": "sections/04-setup-and-evaluation.tex:584",
-  "quote": "Our evaluation has two main limitations.",
-  "paper": "2",
-  "computed": "2 enumerated (First, Second)",
-  "status": "PASS",
-  "note": "Textual count of 'First,'/'Second,' sentence starters (and absence of 'Third,') in the Limitations paragraph containing the anchor (sections/04-setup-and-evaluation.tex:584)."
- },
- {
-  "id": "const-029",
-  "location": "sections/04-setup-and-evaluation.tex:596",
-  "quote": "the current $18$--$24$~h lifetime of introduction circuits",
-  "paper": "18--24",
-  "computed": "18--24",
-  "status": "CONSTANT",
-  "note": "[moved from sections/05-discussion.tex:120] CONSTANT: Tor rend-spec-v3 / hs_circuit INTRO_POINT_LIFETIME_MIN_SECONDS = 18 h, MAX = 24 h; cited platzer2020critical."
- },
- {
-  "id": "const-025",
-  "location": "sections/05-discussion.tex:4",
-  "quote": "Our attack exploits the $18$--$24$~h introduction-circuit lifetime",
-  "paper": "18--24",
-  "computed": "18--24",
-  "status": "CONSTANT",
-  "note": "CONSTANT: Tor rend-spec-v3 / hs_circuit INTRO_POINT_LIFETIME_MIN_SECONDS = 18 h, MAX = 24 h; cited platzer2020critical."
- },
- {
-  "id": "const-026",
-  "location": "sections/05-discussion.tex:8",
-  "quote": "a service-side path used for only about $10$~min, the lifetime of an ordinary Tor circuit",
-  "paper": "10",
-  "computed": "10",
-  "status": "CONSTANT",
-  "note": "CONSTANT: Tor default MaxCircuitDirtiness = 600 s = 10 min (tor(1) manual)."
- },
- {
-  "id": "const-027",
-  "location": "sections/05-discussion.tex:17",
-  "quote": "approximately every $10$~min. Relay selection remains unchanged",
-  "paper": "10",
-  "computed": "10",
-  "status": "CONSTANT",
-  "note": "CONSTANT: proposal parameter chosen by the authors (matches MaxCircuitDirtiness); restated in the same section (const-028)."
- },
- {
-  "id": "const-028",
-  "location": "sections/05-discussion.tex:32",
-  "quote": "even if a stage converges within a $10$-minute interval",
-  "paper": "10",
-  "computed": "10 (const-027 sentence says 10)",
-  "status": "CONSTANT",
-  "note": "CONSTANT: proposal parameter; textual check that it equals const-027."
- },
- {
-  "id": "const-030",
-  "location": "sections/06-related-work.tex:28",
-  "quote": "traffic observed at two network vantage points and generalizes to unseen flows",
-  "paper": "two",
-  "computed": "two",
-  "status": "CONSTANT",
-  "note": "CONSTANT: property of cited work (DeepCorr, Nasr et al., CCS 2018)."
- },
- {
-  "id": "const-031",
-  "location": "sections/07-conclusion.tex:27",
-  "quote": "requiring visibility of only\none relay at a time.",
-  "paper": "one",
-  "computed": "one",
-  "status": "CONSTANT",
-  "note": "CONSTANT: threat-model assumption defined by the paper (sections/03-attack.tex:297)."
- },
- {
   "id": "setup-014",
   "location": "sections/07-conclusion.tex:29",
   "quote": "We evaluated the attack in nine end-to-end experiments against a",
@@ -1065,19 +642,10 @@
   "id": "setup-023",
   "location": "sections/appendix_results.tex:5",
   "quote": "All $36$ individual run--stage observations are presented in",
-  "paper": "36",
-  "computed": "36 (run,stage) in TRAJ; 36 MET rows; 36 rows in tab:run-stage-thresholds",
+  "paper": "36; 36 rows in tab:run-stage-thresholds",
+  "computed": "36 (run,stage) in TRAJ; 36 MET rows",
   "status": "PASS",
-  "note": "Same as setup-013 plus a count of stage rows in the appendix table."
- },
- {
-  "id": "setup-024",
-  "location": "sections/appendix_results.tex:7",
-  "quote": "every run in Figures~\\ref{fig:runs-grid-a}--\\ref{fig:runs-grid-c}.",
-  "paper": "3 figures (a--c)",
-  "computed": "3 files present (runs_grid_{a,b,c}.pdf); generate.py groups 9 runs into 3 panels of 3/3/3 (suffixes a,b,c); .tex reference span ('a', 'c')",
-  "status": "PASS",
-  "note": "File existence for figures/runs_grid_{a,b,c}.pdf; panel grouping read (ast) from repro/generate.py figs_runs_grid and must cover every TRAJ run once."
+  "note": "Same as setup-013; the paper side also counts the stage rows in the appendix table (must be 36)."
  },
  {
   "id": "setup-025",
@@ -1098,15 +666,6 @@
   "note": "min/max of MET.experiment_date (per stage row); day_label must map 1:1 onto 07..10 Jan."
  },
  {
-  "id": "app-001",
-  "location": "sections/appendix_results.tex:16-17",
-  "quote": "$T_{\\leq q}=\\min\\{t:|\\mathcal{I}_t|\\leq q\\}$; $T_{\\mathrm{conv}}=\\min\\{t:|\\mathcal{I}_t|=1\\}$; and",
-  "paper": "T<=q = min t with |I_t|<=q; Tconv = min t with |I_t|=1; 36 rows",
-  "computed": "36/36 run-stage rows available in TRAJ and MET; T<=q (q in 10,5,3,2), Tconv = T<=1 and |A_1| = |I_1| derived from TRAJ for each; definitions on lines 16-17 present",
-  "status": "PASS",
-  "note": "Definitional check: asserts lines 16-17 of the current .tex still carry the T<=q and Tconv definitions and that every one of the 36 (run, stage) pairs has a trajectory and a metrics row; the per-row values are checked by app-002..app-037 and the whole body by app-body."
- },
- {
   "id": "app-002",
   "location": "sections/appendix_results.tex:26",
   "quote": "R1 (Day 1, 02:00)  & Intro. Point  & 79  & 3  & 4  & 42  & 245  & 285  & 830 \\\\",
@@ -1119,8 +678,8 @@
   "id": "app-body",
   "location": "sections/appendix_results.tex:26",
   "quote": "\\label{tab:run-stage-thresholds}",
-  "paper": "44 body lines",
-  "computed": "44 body lines from generate.py",
+  "paper": "44 lines, sha1 ff95511ba9d7",
+  "computed": "44 lines, sha1 ff95511ba9d7",
   "status": "PASS",
   "note": "tabular body of tab:run-stage-thresholds equals repro/out/tables/run_stage_thresholds_body.tex (make tables) modulo whitespace"
  },
@@ -1449,123 +1008,6 @@
   "note": "printed row parsed from sections/appendix_results.tex:77; |A_1| and T columns derived from TRAJ (12,EG), CW from MET"
  },
  {
-  "id": "setup-028",
-  "location": "sections/appendix_results.tex:86",
-  "quote": "Intersection degradation for Runs~1--3 across the four reconstruction",
-  "paper": "1--3; four",
-  "computed": "run labels in runs_grid_a.pdf: R[1, 2, 3]; generate.py panel a raw [4, 5, 6] -> paper [1, 2, 3]; stages per run in TRAJ [4, 4, 4]; 4 stage column titles in PDF",
-  "status": "PASS",
-  "note": "Run labels 'Rn' read with pdftotext from the committed PDF and the panel grouping parsed (ast) from repro/generate.py figs_runs_grid, both compared with the caption range parsed from the .tex; each grouped run has 4 stage codes in TRAJ and the PDF carries 4 stage column titles."
- },
- {
-  "id": "setup-029",
-  "location": "sections/appendix_results.tex:88",
-  "quote": "Each panel reports stage-start consensus weight (CW) and singleton convergence $T_{\\mathrm{conv}}$.",
-  "paper": "36 (CW, T_conv) panel annotations",
-  "computed": "36/36 annotation pairs read from committed PDFs; a: 12 (CW,T) pairs match; b: 12 (CW,T) pairs match; c: 12 (CW,T) pairs match",
-  "status": "PASS",
-  "note": "pdftotext on figures/runs_grid_{a,b,c}.pdf; 'CW n / T=m' pairs compared as multisets with MET.consensus_weight and T_conv recomputed from TRAJ over the generate.py panel groups. ASSUMPTION: committed PDFs were produced by the current generate.py (figures are not regenerated here)."
- },
- {
-  "id": "setup-030",
-  "location": "sections/appendix_results.tex:96",
-  "quote": "Intersection degradation for Runs~4--6 across the four reconstruction",
-  "paper": "4--6; four",
-  "computed": "run labels in runs_grid_b.pdf: R[4, 5, 6]; generate.py panel b raw [7, 8, 9] -> paper [4, 5, 6]; stages per run in TRAJ [4, 4, 4]; 4 stage column titles in PDF",
-  "status": "PASS",
-  "note": "Run labels 'Rn' read with pdftotext from the committed PDF and the panel grouping parsed (ast) from repro/generate.py figs_runs_grid, both compared with the caption range parsed from the .tex; each grouped run has 4 stage codes in TRAJ and the PDF carries 4 stage column titles."
- },
- {
-  "id": "setup-031",
-  "location": "sections/appendix_results.tex:104",
-  "quote": "Intersection degradation for Runs~7--9 across the four reconstruction",
-  "paper": "7--9; four",
-  "computed": "run labels in runs_grid_c.pdf: R[7, 8, 9]; generate.py panel c raw [10, 11, 12] -> paper [7, 8, 9]; stages per run in TRAJ [4, 4, 4]; 4 stage column titles in PDF",
-  "status": "PASS",
-  "note": "Run labels 'Rn' read with pdftotext from the committed PDF and the panel grouping parsed (ast) from repro/generate.py figs_runs_grid, both compared with the caption range parsed from the .tex; each grouped run has 4 stage codes in TRAJ and the PDF carries 4 stage column titles."
- },
- {
-  "id": "setup-015",
-  "location": "sections/implementation.tex:12",
-  "quote": "Four of the five components (Table~\\ref{tab:impl-components}) run on the monitored relay's host",
-  "paper": "four of five",
-  "computed": "4 of 5 (Controller, Probe-client daemon, Intersection plugin, \\texttt{tcpdump}, Onion-service daemon)",
-  "status": "PASS",
-  "note": "Rows of tab:impl-components; all but the Onion-service daemon run on the monitored relay."
- },
- {
-  "id": "setup-016",
-  "location": "sections/implementation.tex:14",
-  "quote": "the fifth is the modified onion-service daemon on the service host. The four move with the observation",
-  "paper": "fifth; four",
-  "computed": "Onion-service daemon is row 5 of 5; 4 remaining",
-  "status": "PASS",
-  "note": "Textual: position of the Onion-service daemon row in tab:impl-components."
- },
- {
-  "id": "const-032",
-  "location": "sections/implementation.tex:32",
-  "quote": "Triggers one introduction handshake per iteration",
-  "paper": "one",
-  "computed": "one TRAJ row per (run,stage,trial): 2771 rows across 36 run-stage trajectories; trial indices re-read from trajectories_every_trial.csv are contiguous 1..T in all 36",
-  "status": "CONSTANT",
-  "note": "CONSTANT: prototype design; consistent with one TRAJ row per (run,stage,trial) (contiguity verified in-module from the raw CSV)."
- },
- {
-  "id": "setup-017",
-  "location": "sections/implementation.tex:43",
-  "quote": "Pins the target introduction circuit to the four relays we operate.",
-  "paper": "four",
-  "computed": "4 stage codes per run in TRAJ, 4 in MET (codes ['EG', 'IP', 'M1', 'VG'])",
-  "status": "PASS",
-  "note": "One operated relay per stage; same test as setup-002."
- },
- {
-  "id": "setup-018",
-  "location": "sections/implementation.tex:60",
-  "quote": "}_{\\textnormal{four public relays we operate}}.",
-  "paper": "four",
-  "computed": "4 stage codes per run in TRAJ, 4 in MET (codes ['EG', 'IP', 'M1', 'VG'])",
-  "status": "PASS",
-  "note": "One operated relay per stage; same test as setup-002."
- },
- {
-  "id": "setup-019",
-  "location": "sections/implementation.tex:64",
-  "quote": "Operating the four relays ourselves substitutes for the visibility",
-  "paper": "four",
-  "computed": "4 stage codes per run in TRAJ, 4 in MET (codes ['EG', 'IP', 'M1', 'VG'])",
-  "status": "PASS",
-  "note": "One operated relay per stage; same test as setup-002."
- },
- {
-  "id": "setup-020",
-  "location": "sections/implementation.tex:67",
-  "quote": "The four monitored-relay stages walk this circuit in reverse",
-  "paper": "four (IP->M1->VG->EG)",
-  "computed": "4 stage codes per run in TRAJ, 4 in MET (codes ['EG', 'IP', 'M1', 'VG']); stage starts ordered IP<M1<VG<EG in all runs",
-  "status": "PASS",
-  "note": "setup-002 plus setup-003 ordering check (reverse of the circuit guard->vanguard->middle->IP)."
- },
- {
-  "id": "const-033",
-  "location": "sections/implementation.tex:71",
-  "quote": "At stage~$0$ the monitored relay is the advertised Introduction Point.",
-  "paper": "0",
-  "computed": "earliest stage per run by (experiment_date, experiment_time_utc) = IP for all 9 runs",
-  "status": "CONSTANT",
-  "note": "CONSTANT: design; MET first stage_code per run is IP (earliest experiment_date + experiment_time_utc, minute resolution) - see setup-003."
- },
- {
-  "id": "const-034",
-  "location": "sections/implementation.tex:101",
-  "quote": "removing the known predecessor $r_{m_{i-1}}$ from stage~$1$ onward",
-  "paper": "1",
-  "computed": "1",
-  "status": "CONSTANT",
-  "note": "CONSTANT: algorithm design (same constant as const-018)."
- },
- {
   "id": "conv-025",
   "location": "sections/implementation.tex:102",
   "quote": "If the intersection still holds\nmore than one pseudonym, the controller kills the probe client",
@@ -1573,15 +1015,6 @@
   "computed": "all 36 stages: |I_t| > 1 for every t < Tconv and |I_Tconv| = 1 (no trial recorded after convergence)",
   "status": "PASS",
   "note": "Iteration continues exactly while |I| > 1 and no trials were recorded after convergence (the trajectory ends at its first singleton)."
- },
- {
-  "id": "const-035",
-  "location": "sections/implementation.tex:104",
-  "quote": "$\\delta=30$~s, and repeats steps~6a--13 against the same relay",
-  "paper": "30",
-  "computed": "30",
-  "status": "CONSTANT",
-  "note": "CONSTANT: implementation parameter (delta = 30 s slept between iterations); stage timestamps are not part of the released dataset, so it is not recomputable. Restated at sections/04-setup-and-evaluation.tex:329 and :370 (const-046/047, textual consistency)."
  },
  {
   "id": "conv-026",
@@ -1600,410 +1033,5 @@
   "computed": "min(intersection_size) = 1 over 2771 rows; no empty intersection recorded",
   "status": "PASS",
   "note": "Same computation as conv-004: the abort branch never fired in the recorded data."
- },
- {
-  "id": "setup-021",
-  "location": "sections/implementation.tex:144",
-  "quote": "one CSV records the run, stage, iteration, and intersection cardinality per observation, a second records stage-level metadata",
-  "paper": "2 CSVs",
-  "computed": "2 CSV(s) in data/ (run_stage_metrics.csv, trajectories_every_trial.csv); TRAJ header=['run_id', 'stage', 'trial', 'intersection_size']; MET header=['run_id', 'stage_code', 'experiment_date', 'day_label', 'experiment_time_utc', 'consensus_weight']",
-  "status": "PASS",
-  "note": "File existence, exact TRAJ header, exact MET header and no other CSV in data/. The released run_stage_metrics.csv is the reduced stage-level metadata file: per run and stage it holds only the run/stage labels (experiment_date, day_label, experiment_time_utc) and the monitored relay's consensus weight; every convergence quantity is derived from the trajectories CSV."
- },
- {
-  "id": "setup-022",
-  "location": "sections/implementation.tex:152",
-  "quote": "We considered each of the TRSB's nine research-safety principles as follows.",
-  "paper": "nine",
-  "computed": "9 \\item entries in the enumerate",
-  "status": "PASS",
-  "note": "Textual: \\item count in the enumerate following the quoted sentence. The TRSB page itself lists nine considerations (external, not re-fetched)."
- },
- {
-  "id": "const-036",
-  "location": "sections/implementation.tex:155",
-  "quote": "A typical ten-minute period on the deployed network involves roughly 550{,}000 active users and about 1.4~million active circuits~\\cite{jansen2016safely}",
-  "paper": "ten-minute; 550,000; 1.4 million",
-  "computed": "ten-minute; 550,000; 1.4 million",
-  "status": "CONSTANT",
-  "note": "CONSTANT: cited jansen2016safely (Safely Measuring Tor, CCS 2016)."
- },
- {
-  "id": "const-037",
-  "location": "sections/implementation.tex:167",
-  "quote": "pseudonymised in volatile memory using per-stage RSA keys",
-  "paper": "per-stage (one key per stage)",
-  "computed": "36 run-stage rows in MET => 36 keys implied",
-  "status": "CONSTANT",
-  "note": "CONSTANT: design statement; implies one key per MET row (36) but keys never reached disk, so the key count itself is not checkable."
- },
- {
-  "id": "ext-003",
-  "location": "sections/appendix_time_of_introduction_handshake_completion.tex:4",
-  "quote": "we measured the introduction handshake for 16 publicly reachable onion services",
-  "paper": "16",
-  "computed": "16",
-  "status": "PASS",
-  "note": "Textual: printed service count parsed from the .tex compared with the number of data rows in tab:onion_avg_latency."
- },
- {
-  "id": "ext-004",
-  "location": "sections/appendix_time_of_introduction_handshake_completion.tex:4",
-  "quote": "repeating the measurement 10 times for each service",
-  "paper": "10",
-  "computed": "n/a (raw trials absent)",
-  "status": "UNVERIFIABLE",
-  "note": "Raw per-trial introduction-latency measurements are not in the project; only the per-service means are printed. Trial count as printed at each mention: repeating=10, perform=10, mean-across=10, caption=10."
- },
- {
-  "id": "ext-005",
-  "location": "sections/appendix_time_of_introduction_handshake_completion.tex:6",
-  "quote": "We measure this interval using 16 publicly reachable onion services.",
-  "paper": "16",
-  "computed": "16",
-  "status": "PASS",
-  "note": "Textual: printed service count parsed from the .tex compared with the number of data rows in tab:onion_avg_latency."
- },
- {
-  "id": "ext-006",
-  "location": "sections/appendix_time_of_introduction_handshake_completion.tex:6",
-  "quote": "For each service, we perform 10 independent introduction handshakes",
-  "paper": "10",
-  "computed": "n/a (raw trials absent)",
-  "status": "UNVERIFIABLE",
-  "note": "Raw per-trial introduction-latency measurements are not in the project; only the per-service means are printed. Trial count as printed at each mention: repeating=10, perform=10, mean-across=10, caption=10."
- },
- {
-  "id": "ext-007",
-  "location": "sections/appendix_time_of_introduction_handshake_completion.tex:6",
-  "quote": "yielding 160 measurements in total",
-  "paper": "160",
-  "computed": "16 rows x 10 stated trials = 160",
-  "status": "PASS",
-  "note": "Arithmetic consistency only: table row count times the trial count printed in the same paragraph, compared with the printed total; the trial factor itself is unverifiable (raw trials absent)."
- },
- {
-  "id": "ext-008",
-  "location": "sections/appendix_time_of_introduction_handshake_completion.tex:16",
-  "quote": "reports the mean $\\Delta t$ across the 10 trials for each onion service",
-  "paper": "10",
-  "computed": "n/a (raw trials absent)",
-  "status": "UNVERIFIABLE",
-  "note": "Raw per-trial introduction-latency measurements are not in the project; only the per-service means are printed. Trial count as printed at each mention: repeating=10, perform=10, mean-across=10, caption=10."
- },
- {
-  "id": "ext-009",
-  "location": "sections/appendix_time_of_introduction_handshake_completion.tex:16",
-  "quote": "The per-service means range from $0.521$~s to $1.780$~s.",
-  "paper": "0.521--1.780",
-  "computed": "0.521--1.780",
-  "status": "PASS",
-  "note": "Range parsed from the prose at run time; table-internal min (BMG) and max (Black Cloud) of the parsed Avg dt column."
- },
- {
-  "id": "ext-010",
-  "location": "sections/appendix_time_of_introduction_handshake_completion.tex:16",
-  "quote": "the complete interval therefore remains on the order of seconds",
-  "paper": "order of seconds",
-  "computed": "all 16 means in [0.521, 1.780] s, mean 0.899 s; criterion 0 < v and max < 2.0 s: True",
-  "status": "PASS",
-  "note": "Table-internal: largest per-service mean is 1.780 s (Black Cloud); criterion used: every mean positive and below 2.0 s."
- },
- {
-  "id": "ext-011a",
-  "location": "sections/appendix_time_of_introduction_handshake_completion.tex:23",
-  "quote": "across 16 onion services, with 10 trials per service",
-  "paper": "16",
-  "computed": "16 rows",
-  "status": "PASS",
-  "note": "Caption service count parsed from the .tex compared with the table row count."
- },
- {
-  "id": "ext-011b",
-  "location": "sections/appendix_time_of_introduction_handshake_completion.tex:23",
-  "quote": "across 16 onion services, with 10 trials per service",
-  "paper": "10",
-  "computed": "caption 10 vs methodology 10: consistent=True; raw trials absent",
-  "status": "UNVERIFIABLE",
-  "note": "Trials per service cannot be verified (raw trials absent); only textual consistency with the methodology paragraph is checked, and a disagreement is reported as FAIL."
- },
- {
-  "id": "ext-012",
-  "location": "sections/appendix_time_of_introduction_handshake_completion.tex:29",
-  "quote": "Cryptostamps     & Postage store        & 0.642 \\\\",
-  "paper": "0.642",
-  "computed": "tex=0.642; inside prose range [0.521,1.780]=True; inside Discussion range [0.521,1.780]=True; raw trials absent",
-  "status": "UNVERIFIABLE",
-  "note": "Raw per-trial latencies not in project; the mean itself is unverifiable."
- },
- {
-  "id": "ext-013",
-  "location": "sections/appendix_time_of_introduction_handshake_completion.tex:30",
-  "quote": "Breaking Bad     & Drug forum           & 0.547 \\\\",
-  "paper": "0.547",
-  "computed": "tex=0.547; inside prose range [0.521,1.780]=True; inside Discussion range [0.521,1.780]=True; raw trials absent",
-  "status": "UNVERIFIABLE",
-  "note": "Raw per-trial latencies not in project; the mean itself is unverifiable."
- },
- {
-  "id": "ext-014",
-  "location": "sections/appendix_time_of_introduction_handshake_completion.tex:31",
-  "quote": "Black Cloud      & Onion pastebin       & 1.780 \\\\",
-  "paper": "1.780",
-  "computed": "tex=1.780; inside prose range [0.521,1.780]=True; inside Discussion range [0.521,1.780]=True; raw trials absent",
-  "status": "UNVERIFIABLE",
-  "note": "Raw per-trial latencies not in project; the mean itself is unverifiable. Equals the stated maximum."
- },
- {
-  "id": "ext-015",
-  "location": "sections/appendix_time_of_introduction_handshake_completion.tex:32",
-  "quote": "Ahmia            & HS search engine     & 1.019 \\\\",
-  "paper": "1.019",
-  "computed": "tex=1.019; inside prose range [0.521,1.780]=True; inside Discussion range [0.521,1.780]=True; raw trials absent",
-  "status": "UNVERIFIABLE",
-  "note": "Raw per-trial latencies not in project; the mean itself is unverifiable."
- },
- {
-  "id": "ext-016",
-  "location": "sections/appendix_time_of_introduction_handshake_completion.tex:33",
-  "quote": "Onion ID Serv.   & ID/passport store    & 0.879 \\\\",
-  "paper": "0.879",
-  "computed": "tex=0.879; inside prose range [0.521,1.780]=True; inside Discussion range [0.521,1.780]=True; raw trials absent",
-  "status": "UNVERIFIABLE",
-  "note": "Raw per-trial latencies not in project; the mean itself is unverifiable."
- },
- {
-  "id": "ext-017",
-  "location": "sections/appendix_time_of_introduction_handshake_completion.tex:34",
-  "quote": "ChaTor           & Onion messenger      & 1.230 \\\\",
-  "paper": "1.230",
-  "computed": "tex=1.230; inside prose range [0.521,1.780]=True; inside Discussion range [0.521,1.780]=True; raw trials absent",
-  "status": "UNVERIFIABLE",
-  "note": "Raw per-trial latencies not in project; the mean itself is unverifiable."
- },
- {
-  "id": "ext-018",
-  "location": "sections/appendix_time_of_introduction_handshake_completion.tex:35",
-  "quote": "Comic Book Libr. & Library              & 0.654 \\\\",
-  "paper": "0.654",
-  "computed": "tex=0.654; inside prose range [0.521,1.780]=True; inside Discussion range [0.521,1.780]=True; raw trials absent",
-  "status": "UNVERIFIABLE",
-  "note": "Raw per-trial latencies not in project; the mean itself is unverifiable."
- },
- {
-  "id": "ext-019",
-  "location": "sections/appendix_time_of_introduction_handshake_completion.tex:36",
-  "quote": "Apples4Bitcoin   & Onion apple store    & 0.882 \\\\",
-  "paper": "0.882",
-  "computed": "tex=0.882; inside prose range [0.521,1.780]=True; inside Discussion range [0.521,1.780]=True; raw trials absent",
-  "status": "UNVERIFIABLE",
-  "note": "Raw per-trial latencies not in project; the mean itself is unverifiable."
- },
- {
-  "id": "ext-020",
-  "location": "sections/appendix_time_of_introduction_handshake_completion.tex:37",
-  "quote": "Dread            & Onion forum          & 1.060 \\\\",
-  "paper": "1.060",
-  "computed": "tex=1.060; inside prose range [0.521,1.780]=True; inside Discussion range [0.521,1.780]=True; raw trials absent",
-  "status": "UNVERIFIABLE",
-  "note": "Raw per-trial latencies not in project; the mean itself is unverifiable."
- },
- {
-  "id": "ext-021",
-  "location": "sections/appendix_time_of_introduction_handshake_completion.tex:38",
-  "quote": "Mail2Tor         & Onion mail           & 0.701 \\\\",
-  "paper": "0.701",
-  "computed": "tex=0.701; inside prose range [0.521,1.780]=True; inside Discussion range [0.521,1.780]=True; raw trials absent",
-  "status": "UNVERIFIABLE",
-  "note": "Raw per-trial latencies not in project; the mean itself is unverifiable."
- },
- {
-  "id": "ext-022",
-  "location": "sections/appendix_time_of_introduction_handshake_completion.tex:39",
-  "quote": "Sonar            & Onion messenger      & 0.805 \\\\",
-  "paper": "0.805",
-  "computed": "tex=0.805; inside prose range [0.521,1.780]=True; inside Discussion range [0.521,1.780]=True; raw trials absent",
-  "status": "UNVERIFIABLE",
-  "note": "Raw per-trial latencies not in project; the mean itself is unverifiable."
- },
- {
-  "id": "ext-023",
-  "location": "sections/appendix_time_of_introduction_handshake_completion.tex:40",
-  "quote": "FAH              & Hiring service       & 1.492 \\\\",
-  "paper": "1.492",
-  "computed": "tex=1.492; inside prose range [0.521,1.780]=True; inside Discussion range [0.521,1.780]=True; raw trials absent",
-  "status": "UNVERIFIABLE",
-  "note": "Raw per-trial latencies not in project; the mean itself is unverifiable."
- },
- {
-  "id": "ext-024",
-  "location": "sections/appendix_time_of_introduction_handshake_completion.tex:41",
-  "quote": "Mobile Store     & Mobile store         & 0.871 \\\\",
-  "paper": "0.871",
-  "computed": "tex=0.871; inside prose range [0.521,1.780]=True; inside Discussion range [0.521,1.780]=True; raw trials absent",
-  "status": "UNVERIFIABLE",
-  "note": "Raw per-trial latencies not in project; the mean itself is unverifiable."
- },
- {
-  "id": "ext-025",
-  "location": "sections/appendix_time_of_introduction_handshake_completion.tex:42",
-  "quote": "USJUD            & Counterfeit store    & 0.636 \\\\",
-  "paper": "0.636",
-  "computed": "tex=0.636; inside prose range [0.521,1.780]=True; inside Discussion range [0.521,1.780]=True; raw trials absent",
-  "status": "UNVERIFIABLE",
-  "note": "Raw per-trial latencies not in project; the mean itself is unverifiable."
- },
- {
-  "id": "ext-026",
-  "location": "sections/appendix_time_of_introduction_handshake_completion.tex:43",
-  "quote": "BMG              & Gun store            & 0.521 \\\\",
-  "paper": "0.521",
-  "computed": "tex=0.521; inside prose range [0.521,1.780]=True; inside Discussion range [0.521,1.780]=True; raw trials absent",
-  "status": "UNVERIFIABLE",
-  "note": "Raw per-trial latencies not in project; the mean itself is unverifiable. Equals the stated minimum."
- },
- {
-  "id": "ext-027",
-  "location": "sections/appendix_time_of_introduction_handshake_completion.tex:44",
-  "quote": "DarkSearch       & Onion search engine  & 0.657 \\\\",
-  "paper": "0.657",
-  "computed": "tex=0.657; inside prose range [0.521,1.780]=True; inside Discussion range [0.521,1.780]=True; raw trials absent",
-  "status": "UNVERIFIABLE",
-  "note": "Raw per-trial latencies not in project; the mean itself is unverifiable."
- },
- {
-  "id": "const-038",
-  "location": "sections/appendix_relay_concentration.tex:4",
-  "quote": "We consider the Fourteen Eyes as a grouping of jurisdictions",
-  "paper": "Fourteen (14)",
-  "computed": "14 country names enumerated at line 6",
-  "status": "CONSTANT",
-  "note": "CONSTANT: cited williams2023five; count of country names in line 6 of the same file."
- },
- {
-  "id": "const-039",
-  "location": "sections/appendix_relay_concentration.tex:6",
-  "quote": "Australia, Belgium, Canada, Denmark, France, Germany, Italy, the Netherlands, New Zealand, Norway, Spain, Sweden, the United Kingdom, or the United States",
-  "paper": "14 countries listed",
-  "computed": "14: Australia, Belgium, Canada, Denmark, France, Germany, Italy, the Netherlands, New Zealand, Norway, Spain, Sweden, the United Kingdom, the United States",
-  "status": "CONSTANT",
-  "note": "CONSTANT: list definition; textual check splits the enumeration on commas/'or' and counts."
- },
- {
-  "id": "ext-028",
-  "location": "sections/appendix_relay_concentration.tex:6",
-  "quote": "We obtain a snapshot of the public Tor relay network from Onionoo on 30 November 2025.",
-  "paper": "30 November 2025",
-  "computed": "n/a (snapshot file absent)",
-  "status": "UNVERIFIABLE",
-  "note": "Onionoo snapshot not in the project (repro/README: only a revision log). Recipe: read the snapshot's relays_published timestamp and compare its date. Textual consistency (whole file searched): '30 November 2025' found on lines [6, 23, 30]; no other date strings in the file."
- },
- {
-  "id": "ext-029",
-  "location": "sections/appendix_relay_concentration.tex:9",
-  "quote": "Germany, the United States, and the Netherlands account for a substantial share of the observed relay population.",
-  "paper": "DE, US, NL: substantial share",
-  "computed": "n/a (snapshot file absent)",
-  "status": "UNVERIFIABLE",
-  "note": "Recipe: count running relays by 'country'; check that each of de/us/nl is among the largest country counts and report their combined share (figures/tor_top15_countries.png is derived from the snapshot)."
- },
- {
-  "id": "ext-030",
-  "location": "sections/appendix_relay_concentration.tex:9",
-  "quote": "In aggregate, Fourteen-Eyes jurisdictions host more relays than all remaining jurisdictions combined.",
-  "paper": ">50% of relay count",
-  "computed": "n/a (snapshot file absent)",
-  "status": "UNVERIFIABLE",
-  "note": "Recipe: count(country in 14-Eyes)/count(all) > 0.5 with 14-Eyes = {au, be, ca, dk, fr, de, it, nl, nz, no, es, se, gb, us}."
- },
- {
-  "id": "ext-031",
-  "location": "sections/appendix_relay_concentration.tex:13",
-  "quote": "Approximately $75\\%$ of both the guard and the middle selection-probability mass",
-  "paper": "75%",
-  "computed": "n/a (snapshot file absent)",
-  "status": "UNVERIFIABLE",
-  "note": "Recipe, on the Onionoo snapshot's per-relay guard_probability / middle_probability (not part of the released dataset): sum(guard_probability | country in 14-Eyes)/sum(guard_probability) and the same for middle_probability; both ~75% (figures/14_eyes_probabilities.png). Textual: percentage mentions: [(13, '75%'), (30, '75%')]; all mentions agree."
- },
- {
-  "id": "ext-032",
-  "location": "sections/appendix_relay_concentration.tex:19",
-  "quote": "most of the weight at each of these two positions sits inside a single grouping",
-  "paper": ">50% at both positions",
-  "computed": "n/a (snapshot file absent)",
-  "status": "UNVERIFIABLE",
-  "note": "Implied by ext-031 (75% > 50%) but needs the snapshot to confirm."
- },
- {
-  "id": "ext-033",
-  "location": "sections/appendix_relay_concentration.tex:23",
-  "quote": "Geographic distribution of Tor relays in the 30 November 2025 Onionoo snapshot.",
-  "paper": "30 November 2025",
-  "computed": "date string lines: [6, 23, 30]; caption line present",
-  "status": "UNVERIFIABLE",
-  "note": "Externally unverifiable (snapshot absent); textual consistency: '30 November 2025' found on lines [6, 23, 30]; no other date strings in the file."
- },
- {
-  "id": "ext-034",
-  "location": "sections/appendix_relay_concentration.tex:30",
-  "quote": "in the 30 November 2025 Onionoo snapshot. Approximately $75\\%$ of the probability mass for both positions lies within Fourteen-Eyes jurisdictions.",
-  "paper": "30 November 2025; 75%",
-  "computed": "date string lines: [6, 23, 30]; caption line present; percentage mentions: [(13, '75%'), (30, '75%')]; all mentions agree",
-  "status": "UNVERIFIABLE",
-  "note": "Needs the snapshot (same recipe as ext-031); textual consistency of the date and percentage across all mentions is reported in 'computed'."
- },
- {
-  "id": "const-040",
-  "location": "sections/appendix_relay_concentration.tex:36",
-  "quote": "introduction circuit is reused for at most $18$--$24$~h",
-  "paper": "18--24 h",
-  "computed": "18--24 h",
-  "status": "CONSTANT",
-  "note": "CONSTANT: Tor rend-spec-v3 / hs_circuit INTRO_POINT_LIFETIME_MIN_SECONDS = 18 h, MAX = 24 h; cited platzer2020critical."
- },
- {
-  "id": "const-041",
-  "location": "sections/appendix_relay_concentration.tex:42",
-  "quote": "circuits leave through one reachable guard",
-  "paper": "one (1)",
-  "computed": "one (1)",
-  "status": "CONSTANT",
-  "note": "CONSTANT: Tor guard-spec (one primary guard in use for onion-service circuits)."
- },
- {
-  "id": "const-042",
-  "location": "sections/appendix_relay_concentration.tex:44",
-  "quote": "for the guard set, held for months, to shift",
-  "paper": "months",
-  "computed": "months",
-  "status": "CONSTANT",
-  "note": "CONSTANT: Tor guard-spec guard lifetime (~2-3 months, guard-lifetime consensus parameter)."
- },
- {
-  "id": "const-043",
-  "location": "sections/appendix_relay_concentration.tex:46",
-  "quote": "from a set of four that itself turns over every $1$--$12$~days",
-  "paper": "four; 1--12 days",
-  "computed": "four; 1--12 days",
-  "status": "CONSTANT",
-  "note": "CONSTANT: Tor proposal 333 (NUM_LAYER2_GUARDS = 4; lifetime 1-12 days); same as const-009/010."
- },
- {
-  "id": "const-044",
-  "location": "sections/appendix_relay_concentration.tex:49",
-  "quote": "A service's three introduction circuits share that guard",
-  "paper": "three (3)",
-  "computed": "three (3)",
-  "status": "CONSTANT",
-  "note": "CONSTANT: HiddenServiceNumIntroductionPoints default = 3 (same as const-012)."
- },
- {
-  "id": "const-045",
-  "location": "sections/appendix_relay_concentration.tex:50",
-  "quote": "The three can also be attacked concurrently",
-  "paper": "three (3)",
-  "computed": "three (3)",
-  "status": "CONSTANT",
-  "note": "CONSTANT: same constant as const-044."
  }
 ]

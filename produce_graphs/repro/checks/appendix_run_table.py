@@ -1,8 +1,14 @@
 """Checks for the appendix run/stage table (tab:run-stage-thresholds).
 
-Covers sections/appendix_results.tex lines 16-17 and 26-77: the column
-definitions (app-001), the 36 per-run/per-stage rows (app-002..app-037) and
-the whole tabular body against generate.py's output (app-body).
+Covers sections/appendix_results.tex lines 26-77: the 36 per-run/per-stage
+rows (app-002..app-037) and the whole tabular body against generate.py's
+output (app-body, reported as a digest "<n> lines, sha1 <12 hex>" of the
+whitespace-normalised body lines on both sides).
+
+Without the paper sources the module still emits the data side of all 36
+rows (same ids, same order) and the generated-body digest, with status FAIL
+and the note "paper sources not available"; verify.py's reviewer mode then
+compares them with claims_snapshot.json.
 
 The "paper" side of every row claim is PARSED FROM THE CURRENT .tex LINE
 (not from a transcription): each row is split on '&', the IP row's
@@ -27,6 +33,7 @@ integers), except Day/time which are compared as strings.
 """
 from __future__ import annotations
 
+import hashlib
 import re
 import sys
 from pathlib import Path
@@ -39,12 +46,6 @@ STAGE_LABEL = {"IP": "Intro. Point", "M1": "Middle 1",
                "VG": "Vanguard", "EG": "Entry Guard"}
 QS = [10, 5, 3, 2]
 COLS = ["|A1|", "T<=10", "T<=5", "T<=3", "T<=2", "Tconv", "CW"]
-
-# Definition lines (app-001) that must still be present in the current .tex.
-DEF_LINES = {
-    16: r"$T_{\leq q}=\min\{t:|\mathcal{I}_t|\leq q\}$;",
-    17: r"$T_{\mathrm{conv}}=\min\{t:|\mathcal{I}_t|=1\}$; and",
-}
 
 # Secondary guard only (NOT the paper side): (paper_run, stage) ->
 # (line, day, time, A1, T10, T5, T3, T2, Tconv, CW); day/time only on IP rows.
@@ -213,56 +214,21 @@ def _generate():
     return generate
 
 
+def body_digest(lines):
+    """'<n> lines, sha1 <12 hex>' of a tabular body: the non-blank lines,
+    whitespace-normalised, joined by newlines."""
+    norm = [_core.norm_ws(l) for l in lines if _core.norm_ws(l)]
+    h = hashlib.sha1("\n".join(norm).encode("utf-8")).hexdigest()[:12]
+    return f"{len(norm)} lines, sha1 {h}"
+
+
+def generated_digest(traj, metrics):
+    return body_digest(_generate().thresholds_body(traj, metrics).splitlines())
+
+
 def claims(C, traj, metrics) -> list[dict]:
     out = []
     lines = _tex_lines()
-
-    # ---- app-001: column definitions still printed (registered lines 16-17 are
-    #      only the first place tried; the definitions are located in the current file)
-    def_ok = True
-    def_note = ""
-    def_loc = {}
-    for n, txt in DEF_LINES.items():
-        hit = _core.locate_quote(txt, FILE, n)
-        def_loc[n] = hit[1] if hit and hit[0] == FILE else None
-    q16, q17 = (_quote(lines, def_loc[16]) if def_loc[16] else ""), \
-               (_quote(lines, def_loc[17]) if def_loc[17] else "")
-    if lines is None:
-        def_ok = False
-        def_note = "could not read the .tex file"
-    else:
-        missing = [str(n) for n in DEF_LINES if def_loc[n] is None]
-        if missing:
-            def_ok = False
-            def_note = ("definition text stale: the T<=q / Tconv definitions registered at "
-                        "line(s) " + ", ".join(missing) + " are no longer printed in the file")
-        moved = [f"{n}->{def_loc[n]}" for n in DEF_LINES if def_loc[n] and def_loc[n] != n]
-        if moved:
-            def_note = (def_note + " " if def_note else "") + \
-                       "[moved from " + ", ".join(f"{FILE}:{m}" for m in moved) + "]"
-    n_rows = sum(1 for rid in C.RUN_IDS for s in C.STAGES if (rid, s) in traj and (rid, s) in metrics)
-    if lines is None:
-        status = "UNVERIFIABLE"
-    elif def_ok and n_rows == 36:
-        status = "PASS"
-    else:
-        status = "FAIL"
-    out.append({
-        "id": "app-001",
-        "location": (f"{FILE}:{def_loc[16]}-{def_loc[17]}" if def_loc[16] and def_loc[17]
-                     else f"{FILE}:?"),
-        "quote": (q16 + " " + q17).strip() or r"$T_{\leq q}=\min\{t:|\mathcal{I}_t|\leq q\}$;",
-        "paper": "T<=q = min t with |I_t|<=q; Tconv = min t with |I_t|=1; 36 rows",
-        "computed": f"{n_rows}/36 run-stage rows available in TRAJ and MET; T<=q (q in 10,5,3,2), "
-                    f"Tconv = T<=1 and |A_1| = |I_1| derived from TRAJ for each"
-                    + f"; definitions on lines 16-17 {'present' if def_ok else 'MISSING'}",
-        "status": status,
-        "note": "Definitional check: asserts lines 16-17 of the current .tex still carry "
-                "the T<=q and Tconv definitions and that every one of the 36 (run, stage) "
-                "pairs has a trajectory and a metrics row; the per-row values are checked "
-                "by app-002..app-037 and the whole body by app-body."
-                + (f" {def_note}" if def_note else ""),
-    })
 
     # ---- app-002..app-037: one claim per table row, in paper order (run-major, stage order)
     # Each row is located in the CURRENT table body (run label + stage order);
@@ -295,14 +261,13 @@ def claims(C, traj, metrics) -> list[dict]:
                 parse_err = str(e)
 
             if parse_err is not None:
+                status = "FAIL"
                 if lines is None:
-                    status = "UNVERIFIABLE"
-                    note_parts.append(f"could not read {FILE}: {parse_err}")
+                    note_parts.append("paper sources not available")
                 else:
-                    status = "FAIL"
                     note_parts.append(f"transcription stale: tex row on line {line} "
                                       f"failed to parse ({parse_err})")
-                paper_str = quote or "(unreadable)"
+                paper_str = quote or "n/a"
             else:
                 if (day, hhmm, paper_nums) != (g_day, g_hhmm, list(g_nums)):
                     status = "FAIL"
@@ -342,25 +307,27 @@ def claims(C, traj, metrics) -> list[dict]:
             })
             cid += 1
 
-    # ---- app-body: the whole tabular body equals generate.py's output (modulo whitespace)
+    # ---- app-body: the whole tabular body equals generate.py's output (modulo
+    #      whitespace); both sides reported as a digest of the normalised body lines
+    gen_digest = generated_digest(traj, metrics)
     if body is None:
         out.append({"id": "app-body", "location": f"{FILE}:?", "quote": TABLE_LABEL,
-                    "paper": "n/a", "computed": "n/a", "status": "UNVERIFIABLE",
-                    "note": ("could not read the .tex file" if lines is None else
+                    "paper": "n/a", "computed": gen_digest, "status": "FAIL",
+                    "note": ("paper sources not available" if lines is None else
                              "tab:run-stage-thresholds body (\\midrule .. \\bottomrule) not found")})
         return out
-    gen = _generate()
-    gen_body = [l.strip() for l in gen.thresholds_body(traj, metrics).splitlines() if l.strip()]
+    gen_body = [l.strip() for l in _generate().thresholds_body(traj, metrics).splitlines() if l.strip()]
     norm_tex = [_core.norm_ws(l) for _, l in body]
     norm_gen = [_core.norm_ws(l) for l in gen_body]
     diffs = [f"body line {i + 1}: tex {a!r} vs generate.py {b!r}"
              for i, (a, b) in enumerate(zip(norm_tex, norm_gen)) if a != b]
     if len(norm_tex) != len(norm_gen):
         diffs.append(f"{len(norm_tex)} tex body lines vs {len(norm_gen)} generated")
-    same = not diffs
+    tex_digest = body_digest(l for _, l in body)
+    same = not diffs and tex_digest == gen_digest
     out.append({"id": "app-body", "location": f"{FILE}:{body_line}", "quote": TABLE_LABEL,
-                "paper": f"{len(body)} body lines",
-                "computed": f"{len(gen_body)} body lines from generate.py",
+                "paper": tex_digest,
+                "computed": gen_digest,
                 "status": "PASS" if same else "FAIL",
                 "note": ("tabular body of tab:run-stage-thresholds equals "
                          "repro/out/tables/run_stage_thresholds_body.tex (make tables) modulo whitespace"

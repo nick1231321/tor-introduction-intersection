@@ -14,9 +14,18 @@ Every printed row is parsed from the CURRENT active tex (comment blocks and
   * row selection (contr-sel): the four runs shown per stage must be the ones
     generate.contrast_runs() picks (min, median, second-largest, max T_conv).
   * layout (contr-body): the whole tabular body must equal what generate.py
-    emits, modulo whitespace, so `make tables` and the paper never drift.
+    emits, modulo whitespace, so `make tables` and the paper never drift. Its
+    computed side is a digest of the generated body ("<n> lines, sha1 <12 hex>"
+    over the whitespace-normalised lines) so it can be recomputed without the
+    sources; with sources the paper side is the same digest of the tex body.
 Nothing computed is hard-coded.
+
+Without the paper sources the module emits the data side of every row (same
+ids, same order as the table generate.py prints), the selection per stage and
+the body digest, all with status FAIL and the note "paper sources not
+available"; verify.py's reviewer mode then compares them with the snapshot.
 """
+import hashlib
 import re
 import sys
 from pathlib import Path
@@ -89,6 +98,18 @@ def _vals(d):
             f"{d['t10']}; {d['t3']}; {d['t2']}; {d['tconv']}")
 
 
+def body_digest(lines):
+    """'<n> lines, sha1 <12 hex>' of a tabular body: the non-blank lines,
+    whitespace-normalised, joined by newlines."""
+    norm = [_core.norm_ws(l) for l in lines if _core.norm_ws(l)]
+    h = hashlib.sha1("\n".join(norm).encode("utf-8")).hexdigest()[:12]
+    return f"{len(norm)} lines, sha1 {h}"
+
+
+def generated_digest(gen, traj, metrics):
+    return body_digest(gen.stage_contrasts_body(traj, metrics).splitlines())
+
+
 def claims(C, traj, metrics):
     out = []
     lines, lo, hi = _table_lines()
@@ -108,21 +129,23 @@ def claims(C, traj, metrics):
                                 cw=int(float(met["consensus_weight"])), a1=C.initial_set_size(seq),
                                 t10=C.T_le(seq, 10), t3=C.T_le(seq, 3), t2=C.T_le(seq, 2), tconv=C.T_conv(seq))
                     out.append(dict(id=f"contr-{k:03d}", location=TEX, quote="", paper="n/a",
-                                    computed=_vals(comp), status="UNVERIFIABLE",
+                                    computed=_vals(comp), status="FAIL",
                                     note="paper sources not available"))
         for stage in C.STAGES:
             want = gen.contrast_runs(traj, stage)
             out.append(dict(id=f"contr-sel-{stage}", location=TEX, quote="", paper="n/a",
                             computed="R" + ",R".join(str(r - 3) for r in want),
-                            status="UNVERIFIABLE", note="paper sources not available"))
+                            status="FAIL", note="paper sources not available"))
         out.append(dict(id="contr-body", location=TEX, quote=TABLE_LABEL, paper="n/a",
-                        computed="n/a", status="UNVERIFIABLE", note="active tab:stage-contrasts table not found"))
+                        computed=generated_digest(gen, traj, metrics), status="FAIL",
+                        note="paper sources not available (active tab:stage-contrasts table not found)"))
         return out
     try:
         rows, body = _parse_table(lines, lo, hi)
     except ValueError as e:
         out.append(dict(id="contr-body", location=f"{TEX}:{lo}", quote=TABLE_LABEL,
-                        paper="n/a", computed="n/a", status="UNVERIFIABLE", note=str(e)))
+                        paper="n/a", computed=generated_digest(gen, traj, metrics),
+                        status="FAIL", note=f"tab:stage-contrasts body could not be parsed: {e}"))
         return out
 
     seen = {}
@@ -135,7 +158,7 @@ def claims(C, traj, metrics):
         ip, met, seq = metrics.get((rid, "IP")), metrics.get((rid, stage)), traj.get((rid, stage))
         if ip is None or met is None or seq is None:
             out.append(dict(id=cid, location=location, quote=quote, paper=_vals(paper),
-                            computed="n/a", status="UNVERIFIABLE",
+                            computed="n/a", status="FAIL",
                             note=f"missing data for raw run {rid} stage {stage}"))
             continue
         comp = dict(run=p,
@@ -171,11 +194,12 @@ def claims(C, traj, metrics):
                         note="representative rows = runs with min, median, second-largest and "
                              "max T_conv (ties -> lowest run), in that order (generate.contrast_runs)"))
 
-    # whole body must equal generate.py output (modulo whitespace)
-    gen_body = [l.strip() for l in gen.stage_contrasts_body(traj, metrics).splitlines() if l.strip()]
-    same = [_core.norm_ws(l) for l in body] == [_core.norm_ws(l) for l in gen_body]
+    # whole body must equal generate.py output (modulo whitespace): both sides
+    # are reported as a digest of the whitespace-normalised body lines
+    tex_digest, gen_digest = body_digest(body), generated_digest(gen, traj, metrics)
+    same = tex_digest == gen_digest
     out.append(dict(id="contr-body", location=f"{TEX}:{lo}", quote=TABLE_LABEL,
-                    paper=f"{len(body)} body lines", computed=f"{len(gen_body)} body lines from generate.py",
+                    paper=tex_digest, computed=gen_digest,
                     status="PASS" if same else "FAIL",
                     note="tabular body of tab:stage-contrasts equals repro/out/tables/stage_contrasts_body.tex "
                          "(make tables) modulo whitespace" if same else
