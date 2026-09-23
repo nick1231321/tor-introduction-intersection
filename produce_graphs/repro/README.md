@@ -68,3 +68,11 @@ Add a record to the module for that section (or a new `checks/<name>.py`; it is
 discovered automatically). Recompute the value from `traj` / `metrics`; parse
 the printed value from the `.tex` with `C.find_quote` so that an edited sentence
 is re-checked rather than silently matched. Run `make verify`.
+
+## Verification report for the submitted version
+
+`out/verify_report.md` is the output of `make verify` run against the paper
+sources of the submitted version (which are not part of this repository). It
+lists every numeric claim with its location in the paper, the value printed
+there, the value recomputed from `data/`, and its status, so the checks can be
+inspected without the LaTeX sources.
