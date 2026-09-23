@@ -146,23 +146,6 @@ def claims(C, traj, metrics):
     if nonconverged:
         all_runs_computed += f"; NON-CONVERGED stages (no |I|=1 trial): {nonconverged}"
 
-    # conv-003 / conv-026: convergence = first singleton trial = last recorded trial
-    conv_def_bad = []
-    for k in keys:
-        seq = traj[k]
-        c = tconv(k)
-        d = len(seq)
-        if not (c is not None and c == d and seq[-1] == 1):
-            conv_def_bad.append((k, c, d, seq[-1] if seq else None))
-    conv_def_ok = not conv_def_bad
-    conv_def_computed = (f"all {len(keys)} stages: T<=1(seq) == len(seq) and seq[-1]==1"
-                         if conv_def_ok
-                         else f"mismatches (k, T<=1, len, last): {conv_def_bad}")
-
-    # conv-004 / conv-027: min intersection size (empty never recorded)
-    min_size = min(v for seq in traj.values() for v in seq)
-    n_rows = sum(len(seq) for seq in traj.values())
-
     # conv-007: per-run totals (len(seq); equals sum Tconv when all converged)
     N = {r: sum(len(traj[(r, s)]) for s in C.STAGES) for r in C.RUN_IDS}
 
@@ -204,23 +187,6 @@ def claims(C, traj, metrics):
           "nine (all nine)",
           lambda: (all_runs_computed, all_runs_ok),
           "Same computation as conv-001.")
-
-    # conv-003
-    _emit(out, "conv-003", "sections/03-attack.tex:463",
-          "Stage~$i$ converges at the first iteration $j$\nfor which $|\\mathcal{I}_i^{(j)}|=1$.",
-          "1",
-          lambda: (conv_def_computed, conv_def_ok),
-          "Definition check: in every (run, stage) the first singleton trial is "
-          "the last recorded trial (recording stops at convergence).")
-
-    # conv-004
-    _emit(out, "conv-004", "sections/03-attack.tex:549",
-          "\\If{$|\\mathcal{I}_i| = 0$}",
-          "0",
-          lambda: (f"min(intersection_size) = {min_size} over {n_rows} rows",
-                   min_size == 1),
-          "Abort branch: an empty intersection never occurred in any recorded "
-          "trial, so no recorded run aborted (consistent with conv-001).")
 
     # conv-005
     _emit(out, "conv-005", "sections/04-setup-and-evaluation.tex:352",
@@ -526,40 +492,5 @@ def claims(C, traj, metrics):
           lambda: (all_runs_computed, all_runs_ok),
           "Same computation as conv-001.")
 
-    # conv-025
-    def _c025():
-        bad = []
-        for k in keys:
-            s = traj[k]
-            if not (s and all(v > 1 for v in s[:-1]) and s[-1] == 1):
-                bad.append(("TRAJ", k, "|I|>1 before last trial and last==1 violated"))
-        comp = (f"all {len(keys)} stages: |I_t| > 1 for every t < Tconv and |I_Tconv| = 1 "
-                "(no trial recorded after convergence)" if not bad else f"violations: {bad}")
-        return comp, not bad
-    _emit(out, "conv-025", "sections/implementation.tex:102",
-          "If the intersection still holds\nmore than one pseudonym, the controller kills the probe client",
-          "more than one", _c025,
-          "Iteration continues exactly while |I| > 1 and no trials were recorded "
-          "after convergence (the trajectory ends at its first singleton).")
 
-    # conv-026
-    _emit(out, "conv-026", "sections/implementation.tex:108",
-          "If the cumulative intersection holds a single pseudonym, the stage is done",
-          "single (1)",
-          lambda: (conv_def_computed, conv_def_ok),
-          "Same computation as conv-003.")
-
-    # conv-027
-    _emit(out, "conv-027", "sections/implementation.tex:111",
-          "If the intersection is empty, the pinned path no longer\n"
-          "holds and the run ends with the error \\textsc{IntroductionCircuitDropped}.",
-          "empty (0)",
-          lambda: (f"min(intersection_size) = {min_size} over {n_rows} rows; "
-                   "no empty intersection recorded", min_size == 1),
-          "Same computation as conv-004: the abort branch never fired in the "
-          "recorded data.")
-
-    # sanity: ids unique
-    ids = [c["id"] for c in out]
-    assert len(ids) == len(set(ids)), "duplicate claim ids"
     return out

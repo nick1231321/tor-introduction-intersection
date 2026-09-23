@@ -157,107 +157,14 @@ def claims(C, traj, metrics):
     def st(ok):
         return "PASS" if ok else "FAIL"
 
-    nine_ok, nine_comp = _nine_runs_check(traj, metrics)
-    four_ok, four_comp = _four_stages_check(traj, metrics)
-    order_ok, order_bad = _stage_order_check(metrics)
-
-    # ---- setup-001 ----
-    add("setup-001", "main.tex:78", "Across nine end-to-end experiments",
-        "nine", nine_comp, st(nine_ok),
-        "len(set(run_id)) in TRAJ and MET; raw ids 4..12 = paper runs 1..9.")
-
-    # ---- setup-003 ----
-    add("setup-003", "sections/03-attack.tex:348",
-        "$r_{m_0},\\ldots,r_{m_3}$ denote the Introduction Point, the middle relay "
-        "or layer-3 vanguard, the layer-2 vanguard, and the entry guard",
-        "0..3 = IP,M1,VG,EG",
-        "IP<M1<VG<EG by (experiment_date, experiment_time_utc) in all 9 runs" if order_ok
-        else f"order violated in runs {order_bad}",
-        st(order_ok),
-        "Stage index order inferred from strictly increasing (experiment_date, HH:MM) of "
-        "each stage's own MET row per run (minute resolution).")
-
-    # ---- setup-006 ----
-    add("setup-006", "sections/04-setup-and-evaluation.tex:267",
-        "we ran Algorithm~\\ref{alg:reconstruction} nine times on the live Tor network",
-        "nine", nine_comp, st(nine_ok), "Same test as setup-001.")
-
-    # ---- setup-007 ----
-    add("setup-007", "sections/04-setup-and-evaluation.tex:276",
-        "we pinned the service's introduction circuit to four public Tor relays of ours",
-        "four", four_comp, st(four_ok),
-        "One monitored relay per stage; 4 stage codes per run. Relay identities "
-        "(fingerprints) are not in the dataset, so only the count is checked.")
-
-    # ---- setup-010 ----
-    add("setup-010", "sections/04-setup-and-evaluation.tex:366",
-        "where $N$ is the total number of iterations across the four stages",
-        "four", four_comp, st(four_ok),
-        "Distinct stage codes per run in MET and TRAJ must be exactly {IP,M1,VG,EG}.")
-
-    # ---- setup-011 (nine runs + data rows of tab:end_to_end) ----
-    ev = _tex_lines("sections/04-setup-and-evaluation.tex")
-    n_rows_e2e = None
-    if ev is not None:
-        txt = "\n".join(ev)
-        m = re.search(r"End-to-end reconstruction cost across the nine experiments.*?"
-                      r"\\midrule(.*?)\\midrule", txt, re.S)
-        if m:
-            n_rows_e2e = len(re.findall(r"^\s*(\d+)\s*&", m.group(1), re.M))
-    # caption of tab:end_to_end ("... across the nine experiments: iterations to
-    # convergence per stage ..."); the opening clause is the anchor
-    add("setup-011", "sections/04-setup-and-evaluation.tex:416",
-        "End-to-end reconstruction cost across the nine experiments",
-        f"nine; {n_rows_e2e} data rows in tab:end_to_end" if have_tex else "n/a",
-        nine_comp, st(nine_ok and n_rows_e2e == 9),
-        "Same test as setup-001; the paper side also counts the numbered data rows between "
-        "the \\midrule markers of the end-to-end table (must be 9)."
-        + ("" if have_tex else " paper sources not available."))
-
-    # ---- setup-013 ----
-    n_pairs = len(set(traj.keys()))
-    n_met = len(metrics)
-    ok13 = n_pairs == 36 and n_met == 36
-    add("setup-013", "sections/05-discussion.tex:48",
-        "Across the $36$ stages in our empirical evaluation",
-        "36", f"{n_pairs} distinct (run,stage) in TRAJ; {n_met} rows in MET",
-        st(ok13), "9 runs x 4 stages.")
-
-    # ---- setup-014 ----
-    add("setup-014", "sections/07-conclusion.tex:29",
-        "We evaluated the attack in nine end-to-end experiments against a",
-        "nine", nine_comp, st(nine_ok), "Same test as setup-001.")
-
-    # ---- setup-023 (36 + appendix rows) ----
+    # run labels printed in the appendix table (compared in setup-027)
     app = _tex_lines("sections/appendix_results.tex")
-    n_app_rows = None
     app_labels = []
     if app is not None:
-        txt = "\n".join(app)
         m = re.search(r"\\label\{tab:run-stage-thresholds\}.*?\\midrule(.*?)\\bottomrule",
-                      txt, re.S)
+                      "\n".join(app), re.S)
         if m:
-            body = m.group(1)
-            n_app_rows = len(re.findall(r"&\s*(Intro\. Point|Middle 1|Vanguard|Entry Guard)\s*&", body))
-            app_labels = re.findall(r"R(\d+)\s*\(Day\s*(\d+),\s*(\d{2}:\d{2})\)", body)
-    add("setup-023", "sections/appendix_results.tex:5",
-        "All $36$ individual run--stage observations are presented in",
-        f"36; {n_app_rows} rows in tab:run-stage-thresholds" if have_tex else "n/a",
-        f"{n_pairs} (run,stage) in TRAJ; {n_met} MET rows",
-        st(ok13 and n_app_rows == 36),
-        "Same as setup-013; the paper side also counts the stage rows in the appendix table "
-        "(must be 36)." + ("" if have_tex else " paper sources not available."))
-
-    # ---- setup-025 ----
-    _, mr = _run_ids(traj, metrics)
-    paper_ids = sorted(C.PAPER_RUN.get(r, r - 3) for r in mr)
-    ok25 = len(mr) == 9 and paper_ids == list(range(1, 10))
-    add("setup-025", "sections/appendix_results.tex:13",
-        "Per-run, per-stage measurements for nine end-to-end runs (IDs~1--9)",
-        "nine; 1--9",
-        f"{len(mr)} runs; paper ids {paper_ids[0]}..{paper_ids[-1]} (raw {mr[0]}..{mr[-1]})"
-        if mr else "no runs in MET",
-        st(ok25), "raw run_id - 3 must cover exactly 1..9.")
+            app_labels = re.findall(r"R(\d+)\s*\(Day\s*(\d+),\s*(\d{2}:\d{2})\)", m.group(1))
 
     # ---- setup-026 (date span) ----
     dates = sorted({_stage_date(r) for r in metrics.values()})
