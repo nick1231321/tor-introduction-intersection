@@ -92,10 +92,31 @@ def _vals(d):
 def claims(C, traj, metrics):
     out = []
     lines, lo, hi = _table_lines()
+    gen = _generate()
     if lines is None or lo is None:
+        # No paper sources: emit the data side of every row the generator would
+        # print (same order as the table), so reviewer mode can replay them.
+        k = 0
+        for left, right in gen.CONTRAST_PAIRS:
+            for rl, rr in zip(gen.contrast_runs(traj, left), gen.contrast_runs(traj, right)):
+                for rid, stage in ((rl, left), (rr, right)):
+                    k += 1
+                    ip, met, seq = metrics[(rid, "IP")], metrics[(rid, stage)], traj[(rid, stage)]
+                    comp = dict(run=C.PAPER_RUN[rid],
+                                day=int(re.search(r"(\d+)", ip["day_label"]).group(1)),
+                                time=re.search(r"(\d\d:\d\d)", ip["experiment_time_utc"]).group(1),
+                                cw=int(float(met["consensus_weight"])), a1=C.initial_set_size(seq),
+                                t10=C.T_le(seq, 10), t3=C.T_le(seq, 3), t2=C.T_le(seq, 2), tconv=C.T_conv(seq))
+                    out.append(dict(id=f"contr-{k:03d}", location=TEX, quote="", paper="n/a",
+                                    computed=_vals(comp), status="UNVERIFIABLE",
+                                    note="paper sources not available"))
+        for stage in C.STAGES:
+            want = gen.contrast_runs(traj, stage)
+            out.append(dict(id=f"contr-sel-{stage}", location=TEX, quote="", paper="n/a",
+                            computed="R" + ",R".join(str(r - 3) for r in want),
+                            status="UNVERIFIABLE", note="paper sources not available"))
         out.append(dict(id="contr-body", location=TEX, quote=TABLE_LABEL, paper="n/a",
-                        computed="n/a", status="UNVERIFIABLE",
-                        note="active tab:stage-contrasts table not found"))
+                        computed="n/a", status="UNVERIFIABLE", note="active tab:stage-contrasts table not found"))
         return out
     try:
         rows, body = _parse_table(lines, lo, hi)
@@ -104,7 +125,6 @@ def claims(C, traj, metrics):
                         paper="n/a", computed="n/a", status="UNVERIFIABLE", note=str(e)))
         return out
 
-    gen = _generate()
     seen = {}
     for k, (lineno, stage, paper) in enumerate(rows, 1):
         cid = f"contr-{k:03d}"

@@ -37,17 +37,26 @@ and only used to check the labels inside the generated figure PDFs.
 - `run_stage_thresholds_body.tex` — the appendix table with all 36 run/stage rows;
 - `threshold_summary.pdf`, `runs_grid_{a,b,c}.pdf` — the appendix figures.
 
-`make verify` needs the paper sources to read the printed values. Point it at
-the directory that holds `main.tex` and `sections/`:
+`make verify` has two modes:
 
-    PAPER_ROOT=/path/to/paper make verify
+- **With the paper sources** (`PAPER_ROOT=/path/to/paper make verify`): every
+  printed value is read from the LaTeX text and compared with the recomputed
+  one (PASS/FAIL). This run also freezes each claim's sentence, printed value
+  and recomputed value into `claims_snapshot.json`.
+- **Without the sources (reviewer mode, the default from a clean clone):** the
+  sentence and printed value of each claim come from `claims_snapshot.json`,
+  which was frozen from the submitted version; the value is recomputed from
+  `data/` now. PASS means the recomputation reproduces the frozen printed value.
+  Checks whose evaluation itself needs the sources (table structure, counts of
+  enumerated items) are reported FROZEN with the result they had against the
+  sources. The run writes `out/manual_checklist.md`: for every claim the
+  sentence to look for in the PDF, the value printed there and the recomputed
+  value, so each one can be checked by hand against the paper.
 
-Without the sources it still runs, prints every recomputed value, and reports
-the claims as UNVERIFIABLE instead of PASS/FAIL. The report is written to
-`out/verify_report.md`. Claims whose inputs are not part of this dataset (the
-Onionoo snapshot behind the jurisdiction appendix, the raw introduction-latency
-trials, the operated relays' ages) are reported as UNVERIFIABLE with the recipe
-to compute them once those inputs are available.
+Claims whose inputs are not part of this dataset (the Onionoo snapshot behind
+the jurisdiction appendix, the raw introduction-latency trials, the operated
+relays' ages) are reported as UNVERIFIABLE with the recipe to compute them once
+those inputs are available.
 
 ## Layout
 
@@ -66,7 +75,10 @@ to compute them once those inputs are available.
 - `checks/` — one module per section or table of the paper; each exposes
   `claims(C, traj, metrics)` returning `{id, location, quote, paper, computed,
   status, note}` records.
-- `out/tables/` — the table bodies as last generated (committed for reference).
+- `claims_snapshot.json` — sentence, printed value and recomputed value of every
+  claim, frozen from the submitted version (input of reviewer mode).
+- `out/tables/` — the table bodies as last generated (committed for reference);
+  `out/verify_report.md` and `out/manual_checklist.md` — the last verify run.
 
 ## Adding a claim
 

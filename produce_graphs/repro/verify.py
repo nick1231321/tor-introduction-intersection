@@ -25,6 +25,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import importlib
 import os
 import pkgutil
@@ -39,7 +40,11 @@ import checks as checks_pkg  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
 DEFAULT_OUT = HERE / "out" / "verify_report.md"
-STATUSES = ("PASS", "FAIL", "UNVERIFIABLE", "CONSTANT")
+SNAPSHOT = HERE / "claims_snapshot.json"          # printed values frozen from the submitted paper
+CHECKLIST = HERE / "out" / "manual_checklist.md"  # reviewer-facing list written in snapshot mode
+STATUSES = ("PASS", "FAIL", "FROZEN", "UNVERIFIABLE", "CONSTANT")
+# FROZEN (reviewer mode only): a textual/structural check that passed against the paper
+# sources when the snapshot was taken and cannot be recomputed from data/ alone.
 COLS = ("id", "location", "paper", "computed", "status", "note")
 INTEGRITY_COLS = [("T_le_10", 10), ("T_le_5", 5), ("T_le_3", 3), ("T_le_2", 2), ("T_le_1", 1)]
 
@@ -139,6 +144,112 @@ def load_claims(traj, metrics, only=None):
     return rows
 
 
+# ------------------------------------------------------------------- snapshot
+_TEX_SUBS = [
+    (r"\\textbf\{([^}]*)\}", r"\1"), (r"\\textit\{([^}]*)\}", r"\1"), (r"\\emph\{([^}]*)\}", r"\1"),
+    (r"\\texttt\{([^}]*)\}", r"\1"), (r"\\mathrm\{([^}]*)\}", r"\1"), (r"\\mathcal\{([^}]*)\}", r"\1"),
+    (r"\\tilde\{([^}]*)\}", r"\1"), (r"\\(?:ref|eqref)\{[^}]*\}", "[ref]"), (r"~?\\cite\{[^}]*\}", ""),
+    (r"\\label\{[^}]*\}", ""), (r"\\multicolumn\{\d+\}\{[^}]*\}\{([^}]*)\}", r"\1"),
+    (r"\\leq", "<="), (r"\\geq", ">="), (r"\\max", "max"), (r"\\min", "min"), (r"\\%", "%"),
+    (r"\\,", " "), (r"\\\\", ""), (r"\\(?:midrule|toprule|bottomrule|addlinespace|noindent)", ""),
+    (r"\$", ""), (r"~", " "), (r"--", "-"), (r"\\&", "&"), (r"[{}]", ""), (r"\s+", " "),
+]
+
+
+def plain(tex: str) -> str:
+    """LaTeX snippet -> readable text a reviewer can search for in the PDF."""
+    out = tex
+    for pat, rep in _TEX_SUBS:
+        out = re.sub(pat, rep, out)
+    return out.strip()
+
+
+def write_snapshot(rows):
+    """Freeze the paper side of every claim (sentence, printed value) together
+    with the value recomputed at that time, so the check can be replayed and
+    read without the LaTeX sources."""
+    data = [{k: r[k] for k in ("id", "location", "quote", "paper", "computed", "status", "note")}
+            for r in rows]
+    SNAPSHOT.write_text(json.dumps(data, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+    return len(data)
+
+
+def apply_snapshot(rows):
+    """Reviewer mode: no LaTeX sources. Take the sentence and the printed value
+    of each claim from the snapshot and recompute the value from data/ now.
+    PASS iff the snapshot's comparison passed AND today's recomputation equals
+    the one frozen with it (a changed dataset or check shows up as FAIL).
+    A check whose computed side needs the sources (table structure, counts of
+    enumerated items, ...) cannot be recomputed here; it is reported FROZEN with
+    the status it had against the sources."""
+    snap = {d["id"]: d for d in json.loads(SNAPSHOT.read_text(encoding="utf-8"))}
+    frozen_note = "textual/structural check; verified against the paper sources when the snapshot was taken, not recomputable from data/ alone"
+
+    def not_recomputable(v):
+        v = " ".join(str(v).split())
+        return v in ("", "n/a", "-") or "None" in v or v.startswith("EXCEPTION")
+
+    seen = set()
+    for r in rows:
+        d = snap.get(r["id"])
+        if d is None:
+            r["status"] = "UNVERIFIABLE"
+            r["note"] = "claim not in claims_snapshot.json (added after the snapshot); " + r["note"]
+            continue
+        seen.add(r["id"])
+        r["quote"], r["paper"], r["location"] = d["quote"], d["paper"], d["location"]
+        if d["status"] not in ("PASS", "FAIL"):
+            r["status"], r["note"] = d["status"], d["note"]
+            continue
+        same = " ".join(r["computed"].split()) == " ".join(d["computed"].split())
+        if not same and (r["status"] in ("UNVERIFIABLE", "CONSTANT") or not_recomputable(r["computed"])):
+            # the module could not evaluate this check without the sources
+            r["computed"] = d["computed"]
+            r["status"] = "FROZEN" if d["status"] == "PASS" else "FAIL"
+            r["note"] = frozen_note + "; " + d["note"]
+            continue
+        r["status"] = "PASS" if (d["status"] == "PASS" and same) else "FAIL"
+        r["note"] = (("" if same else "RECOMPUTED VALUE DIFFERS from the one frozen in the snapshot "
+                      f"({d['computed']}); ") + ("" if d["status"] == "PASS" else
+                     "the snapshot already recorded a mismatch with the printed value; ") + d["note"])
+    for cid, d in snap.items():
+        if cid not in seen:
+            st = {"PASS": "FROZEN", "FAIL": "FAIL"}.get(d["status"], d["status"])
+            rows.append({**{k: d[k] for k in ("id", "location", "quote", "paper", "computed")},
+                         "status": st, "module": "snapshot",
+                         "note": (frozen_note if st == "FROZEN" else "claim is in the snapshot but no check produced it now")
+                                 + "; " + d["note"]})
+    return rows
+
+
+def render_checklist(rows, integ):
+    """Markdown list a reviewer can walk through with the PDF open."""
+    n = counts(rows)
+    parts = ["# Manual verification checklist", "",
+             "For each claim: the sentence or table row as printed in the paper (search for it in the PDF),",
+             "the value printed there, and the value recomputed from `data/` by `make verify`.",
+             "PASS = recomputed value equals the printed one; FROZEN = a textual/structural check that",
+             "passed against the paper sources when the snapshot was taken and cannot be recomputed from",
+             "data/ alone; CONSTANT = protocol/implementation constant; UNVERIFIABLE = input not part of",
+             "the released data (reason given).", "",
+             ", ".join(f"{s} {n[s]}" for s in STATUSES) + f"; total {len(rows)}"
+             + (f"; DATA INTEGRITY MISMATCHES {len(integ)}" if integ else ""), ""]
+    cur = None
+    for r in rows:
+        sec = r["location"].split(":")[0]
+        if sec != cur:
+            cur = sec
+            parts += [f"## {sec}", ""]
+        parts += [f"- **{r['id']}** — {r['status']}",
+                  f"  - says: \"{plain(r['quote'])}\"" if r["quote"] else "  - says: (no sentence; structural check)",
+                  f"  - printed: {plain(r['paper'])}",
+                  f"  - recomputed: {' '.join(str(r['computed']).split())}"]
+        if r["status"] != "PASS" and r["note"]:
+            parts.append(f"  - note: {' '.join(r['note'].split())}")
+        parts.append("")
+    return "\n".join(parts) + "\n"
+
+
 # ----------------------------------------------------------------------- ordering
 def paper_file_order():
     """{rel: rank} in the order the paper includes its files (core.paper_files:
@@ -183,11 +294,18 @@ def counts(rows):
     return {s: sum(1 for r in rows if r["status"] == s) for s in STATUSES}
 
 
+def _rel(p):
+    try:
+        return str(Path(p).resolve().relative_to(HERE))
+    except ValueError:
+        return Path(p).name
+
+
 def render_report(rows, integ, full):
     n = counts(rows)
     parts = ["# Verification report", "",
-             f"Data: `{C.DATA / 'trajectories_every_trial.csv'}` and "
-             f"`{C.DATA / 'run_stage_metrics.csv'}`.", "",
+             f"Data: `{_rel(C.DATA / 'trajectories_every_trial.csv')}` and "
+             f"`{_rel(C.DATA / 'run_stage_metrics.csv')}`.", "",
              "Rows are sorted by paper order of the .tex file, then line "
              "(`file:?` = quote not located in the current text).", "",
              render_table(rows, full), "",
@@ -223,9 +341,12 @@ def main(argv=None):
     integ = integrity_check(traj, metrics)
     rows = load_claims(traj, metrics, only=set(a.module) if a.module else None)
     no_tex = not (C.ROOT / "main.tex").exists()
-    if no_tex:
-        # Without the paper sources the printed side of a claim cannot be read, so
-        # nothing can PASS or FAIL: keep the recomputed values, mark the rest.
+    snapshot_mode = no_tex and SNAPSHOT.exists() and not a.module
+    if snapshot_mode:
+        rows = apply_snapshot(rows)
+    elif no_tex:
+        # No sources and no snapshot: the printed side cannot be read, so nothing
+        # can PASS or FAIL; keep the recomputed values, mark the rest.
         for r in rows:
             if r["status"] in ("PASS", "FAIL") and not r["id"].endswith("(module error)"):
                 r["status"] = "UNVERIFIABLE"
@@ -233,9 +354,12 @@ def main(argv=None):
     rank = paper_file_order()
     rows.sort(key=lambda r: (loc_key(r["location"], rank), r["id"]))
 
-    if no_tex:
-        print(f"NOTE: no main.tex under {C.ROOT}; comparison against the printed values is skipped.\n"
-              "      Set PAPER_ROOT=<paper source dir> to check the paper text. Computed values follow.\n")
+    if snapshot_mode:
+        print("Reviewer mode: no LaTeX sources; the sentence and printed value of each claim come from\n"
+              "claims_snapshot.json (frozen from the submitted version), the recomputed value from data/.\n")
+    elif no_tex:
+        print(f"NOTE: no main.tex under {C.ROOT} and no claims_snapshot.json; comparison against the\n"
+              "      printed values is skipped. Set PAPER_ROOT=<paper source dir>. Computed values follow.\n")
     print(render_table(rows, a.full or os.environ.get("VERIFY_FULL") == "1"))
     n = counts(rows)
     print("\n" + ", ".join(f"{s} {n[s]}" for s in STATUSES)
@@ -255,6 +379,11 @@ def main(argv=None):
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(render_report(rows, integ, full=True), encoding="utf-8")
         print(f"\nreport written to {out}")
+        if not no_tex and not a.module:
+            print(f"snapshot of {write_snapshot(rows)} claims written to {SNAPSHOT.name}")
+        if snapshot_mode or not no_tex:
+            CHECKLIST.write_text(render_checklist(rows, integ), encoding="utf-8")
+            print(f"manual checklist written to {CHECKLIST}")
     return 1 if (n["FAIL"] or integ) else 0
 
 
