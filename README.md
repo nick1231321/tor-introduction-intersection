@@ -218,10 +218,14 @@ make tables          # tables -> out/tables/, figures -> out/figures/
 make verify          # recompute every number stated in the evaluation
 ```
 
-`make verify` compares the recomputed values with the paper text when the
-LaTeX sources are available (`PAPER_ROOT=/path/to/paper make verify`); without
-them it prints the recomputed values only. The result of that comparison for
-the submitted version is committed as `produce_graphs/repro/out/verify_report.md`.
+`make verify` recomputes every number from the data and compares it with the
+value printed in the paper. From a clean clone (no LaTeX sources) the printed
+values come from `produce_graphs/repro/claims_snapshot.json`, frozen from the
+submitted version, and the run writes `produce_graphs/repro/out/manual_checklist.md`,
+which lists for every claim the sentence to find in the PDF, the printed value
+and the recomputed value. With the sources available
+(`PAPER_ROOT=/path/to/paper make verify`) the printed values are read from the
+LaTeX text directly.
 See `produce_graphs/repro/README.md` for the data format and the list of checks.
 
 ---
