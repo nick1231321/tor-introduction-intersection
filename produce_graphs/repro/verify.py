@@ -111,6 +111,10 @@ def _normalise(rec, module):
     return r
 
 
+# Definitional statements and repeated setup counts: not results, not reported.
+DROPPED_IDS = {'conv-003', 'conv-004', 'conv-025', 'conv-026', 'conv-027', 'setup-001', 'setup-003', 'setup-006', 'setup-007', 'setup-010', 'setup-011', 'setup-013', 'setup-014', 'setup-023', 'setup-025'}
+
+
 def load_claims(traj, metrics, only=None):
     rows = []
     for mi in sorted(pkgutil.iter_modules(checks_pkg.__path__), key=lambda m: m.name):
@@ -138,7 +142,7 @@ def load_claims(traj, metrics, only=None):
         rows.append({"id": "verify-duplicate-ids", "module": "verify", "location": "repro/checks:?",
                      "quote": "", "paper": "-", "computed": ", ".join(sorted(dup)),
                      "status": "FAIL", "note": "claim ids must be unique across modules"})
-    return rows
+    return [r for r in rows if r["id"] not in DROPPED_IDS]
 
 
 # ------------------------------------------------------------------- snapshot

@@ -1,14 +1,5 @@
 [
  {
-  "id": "setup-001",
-  "location": "main.tex:78",
-  "quote": "Across nine end-to-end experiments",
-  "paper": "nine",
-  "computed": "9 runs in TRAJ (raw ids 4..12), 9 in MET",
-  "status": "PASS",
-  "note": "len(set(run_id)) in TRAJ and MET; raw ids 4..12 = paper runs 1..9."
- },
- {
   "id": "conv-001",
   "location": "main.tex:79",
   "quote": "the attack reconstructs the complete Tor\ncircuit in every run",
@@ -36,51 +27,6 @@
   "note": "Same computation as conv-001."
  },
  {
-  "id": "setup-003",
-  "location": "sections/03-attack.tex:348",
-  "quote": "$r_{m_0},\\ldots,r_{m_3}$ denote the Introduction Point, the middle relay or layer-3 vanguard, the layer-2 vanguard, and the entry guard",
-  "paper": "0..3 = IP,M1,VG,EG",
-  "computed": "IP<M1<VG<EG by (experiment_date, experiment_time_utc) in all 9 runs",
-  "status": "PASS",
-  "note": "Stage index order inferred from strictly increasing (experiment_date, HH:MM) of each stage's own MET row per run (minute resolution)."
- },
- {
-  "id": "conv-003",
-  "location": "sections/03-attack.tex:462",
-  "quote": "Stage~$i$ converges at the first iteration $j$\nfor which $|\\mathcal{I}_i^{(j)}|=1$.",
-  "paper": "1",
-  "computed": "all 36 stages: T<=1(seq) == len(seq) and seq[-1]==1",
-  "status": "PASS",
-  "note": "Definition check: in every (run, stage) the first singleton trial is the last recorded trial (recording stops at convergence)."
- },
- {
-  "id": "conv-004",
-  "location": "sections/03-attack.tex:549",
-  "quote": "\\If{$|\\mathcal{I}_i| = 0$}",
-  "paper": "0",
-  "computed": "min(intersection_size) = 1 over 2771 rows",
-  "status": "PASS",
-  "note": "Abort branch: an empty intersection never occurred in any recorded trial, so no recorded run aborted (consistent with conv-001)."
- },
- {
-  "id": "setup-006",
-  "location": "sections/04-setup-and-evaluation.tex:267",
-  "quote": "we ran Algorithm~\\ref{alg:reconstruction} nine times on the live Tor network",
-  "paper": "nine",
-  "computed": "9 runs in TRAJ (raw ids 4..12), 9 in MET",
-  "status": "PASS",
-  "note": "Same test as setup-001."
- },
- {
-  "id": "setup-007",
-  "location": "sections/04-setup-and-evaluation.tex:276",
-  "quote": "we pinned the service's introduction circuit to four public Tor relays of ours",
-  "paper": "four",
-  "computed": "4 stage codes per run in TRAJ, 4 in MET (codes ['EG', 'IP', 'M1', 'VG'])",
-  "status": "PASS",
-  "note": "One monitored relay per stage; 4 stage codes per run. Relay identities (fingerprints) are not in the dataset, so only the count is checked."
- },
- {
   "id": "conv-005",
   "location": "sections/04-setup-and-evaluation.tex:352",
   "quote": "Across the nine end-to-end experiments, the attack successfully\nreconstructed the complete introduction path in every run.",
@@ -106,15 +52,6 @@
   "computed": "median=260; min=101; max=770 [N per run: R1(raw 4)=382, R2(raw 5)=131, R3(raw 6)=260, R4(raw 7)=152, R5(raw 8)=504, R6(raw 9)=770, R7(raw 10)=211, R8(raw 11)=260, R9(raw 12)=101]",
   "status": "PASS",
   "note": "N(r) = sum of Tconv (= recorded trials) over the four stages; statistics.median over 9 runs."
- },
- {
-  "id": "setup-010",
-  "location": "sections/04-setup-and-evaluation.tex:366",
-  "quote": "where $N$ is the total number of iterations across the four stages",
-  "paper": "four",
-  "computed": "4 stage codes per run in TRAJ, 4 in MET (codes ['EG', 'IP', 'M1', 'VG'])",
-  "status": "PASS",
-  "note": "Distinct stage codes per run in MET and TRAJ must be exactly {IP,M1,VG,EG}."
  },
  {
   "id": "time-006",
@@ -178,15 +115,6 @@
   "computed": "2.84--4.28; 7.62-fold",
   "status": "PASS",
   "note": "min v_max at paper run 6 (N=770), max v_max at paper run 9 (N=101); N ratio 770/101 = 7.624; 'more than sevenfold' = floor(N_max/N_min) == 7 (7 < ratio < 8), floor = 7. [moved from sections/04-setup-and-evaluation.tex:404--405] [quote verified in current tex]"
- },
- {
-  "id": "setup-011",
-  "location": "sections/04-setup-and-evaluation.tex:409",
-  "quote": "End-to-end reconstruction cost across the nine experiments",
-  "paper": "nine; 9 data rows in tab:end_to_end",
-  "computed": "9 runs in TRAJ (raw ids 4..12), 9 in MET",
-  "status": "PASS",
-  "note": "[moved from sections/04-setup-and-evaluation.tex:416]; Same test as setup-001; the paper side also counts the numbered data rows between the \\midrule markers of the end-to-end table (must be 9)."
  },
  {
   "id": "e2e-001",
@@ -477,15 +405,6 @@
   "note": "[moved from sections/05-discussion.tex:49] Threshold q=10 is the definition used by the same sentence."
  },
  {
-  "id": "setup-013",
-  "location": "sections/04-setup-and-evaluation.tex:525",
-  "quote": "Across the $36$ stages in our empirical evaluation",
-  "paper": "36",
-  "computed": "36 distinct (run,stage) in TRAJ; 36 rows in MET",
-  "status": "PASS",
-  "note": "[moved from sections/05-discussion.tex:48]; 9 runs x 4 stages."
- },
- {
   "id": "conv-009",
   "location": "sections/04-setup-and-evaluation.tex:526",
   "quote": "and $64\\%$ of stages reached this threshold within five iterations",
@@ -621,15 +540,6 @@
   "note": "[moved from sections/05-discussion.tex:87] Paper runs 3, 5 = raw 6, 8. Plateau = contiguous run of value 3 from T<=3 to Tconv-1; equivalently count(seq==3)."
  },
  {
-  "id": "setup-014",
-  "location": "sections/07-conclusion.tex:29",
-  "quote": "We evaluated the attack in nine end-to-end experiments against a",
-  "paper": "nine",
-  "computed": "9 runs in TRAJ (raw ids 4..12), 9 in MET",
-  "status": "PASS",
-  "note": "Same test as setup-001."
- },
- {
   "id": "conv-024",
   "location": "sections/07-conclusion.tex:32",
   "quote": "Across all nine experiments, the attack successfully reconstructed",
@@ -637,24 +547,6 @@
   "computed": "9 of 9 runs converged at all 4 stages (36/36 stages reach |I|=1)",
   "status": "PASS",
   "note": "Same computation as conv-001."
- },
- {
-  "id": "setup-023",
-  "location": "sections/appendix_results.tex:5",
-  "quote": "All $36$ individual run--stage observations are presented in",
-  "paper": "36; 36 rows in tab:run-stage-thresholds",
-  "computed": "36 (run,stage) in TRAJ; 36 MET rows",
-  "status": "PASS",
-  "note": "Same as setup-013; the paper side also counts the stage rows in the appendix table (must be 36)."
- },
- {
-  "id": "setup-025",
-  "location": "sections/appendix_results.tex:13",
-  "quote": "Per-run, per-stage measurements for nine end-to-end runs (IDs~1--9)",
-  "paper": "nine; 1--9",
-  "computed": "9 runs; paper ids 1..9 (raw 4..12)",
-  "status": "PASS",
-  "note": "raw run_id - 3 must cover exactly 1..9."
  },
  {
   "id": "setup-026",
@@ -1006,32 +898,5 @@
   "computed": "86; 5; 18; 40; 40; 84; 4400",
   "status": "PASS",
   "note": "printed row parsed from sections/appendix_results.tex:77; |A_1| and T columns derived from TRAJ (12,EG), CW from MET"
- },
- {
-  "id": "conv-025",
-  "location": "sections/implementation.tex:102",
-  "quote": "If the intersection still holds\nmore than one pseudonym, the controller kills the probe client",
-  "paper": "more than one",
-  "computed": "all 36 stages: |I_t| > 1 for every t < Tconv and |I_Tconv| = 1 (no trial recorded after convergence)",
-  "status": "PASS",
-  "note": "Iteration continues exactly while |I| > 1 and no trials were recorded after convergence (the trajectory ends at its first singleton)."
- },
- {
-  "id": "conv-026",
-  "location": "sections/implementation.tex:108",
-  "quote": "If the cumulative intersection holds a single pseudonym, the stage is done",
-  "paper": "single (1)",
-  "computed": "all 36 stages: T<=1(seq) == len(seq) and seq[-1]==1",
-  "status": "PASS",
-  "note": "Same computation as conv-003."
- },
- {
-  "id": "conv-027",
-  "location": "sections/implementation.tex:111",
-  "quote": "If the intersection is empty, the pinned path no longer\nholds and the run ends with the error \\textsc{IntroductionCircuitDropped}.",
-  "paper": "empty (0)",
-  "computed": "min(intersection_size) = 1 over 2771 rows; no empty intersection recorded",
-  "status": "PASS",
-  "note": "Same computation as conv-004: the abort branch never fired in the recorded data."
  }
 ]

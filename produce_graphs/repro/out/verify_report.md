@@ -1,8 +1,5 @@
 ```
 == Abstract ==
-[PASS] "Across nine end-to-end experiments"
-       paper: nine
-       data:  9 runs in trajectories (raw ids 4..12), 9 in run metadata
 [PASS] "the attack reconstructs the complete Tor circuit in every run"
        paper: every run (9 of 9)
        data:  9 of 9 runs converged at all 4 stages (36/36 stages reach |I|=1)
@@ -15,24 +12,7 @@
        paper: nine (all nine)
        data:  9 of 9 runs converged at all 4 stages (36/36 stages reach |I|=1)
 
-== Section 3 ==
-[PASS] "r_m_0,...,r_m_3 denote the Introduction Point, the middle relay or layer-3 vanguard, the layer-2 vanguard, and the entry guard"
-       paper: 0..3 = IP,M1,VG,EG
-       data:  IP<M1<VG<EG by (experiment_date, experiment_time_utc) in all 9 runs
-[PASS] "Stage i converges at the first iteration j for which |I_i^(j)|=1."
-       paper: 1
-       data:  all 36 stages: T<=1(seq) == len(seq) and seq[-1]==1
-[PASS] "\If|I_i| = 0"
-       paper: 0
-       data:  min(intersection_size) = 1 over 2771 rows
-
 == Section 4 ==
-[PASS] "we ran Algorithm [ref] nine times on the live Tor network"
-       paper: nine
-       data:  9 runs in trajectories (raw ids 4..12), 9 in run metadata
-[PASS] "we pinned the service's introduction circuit to four public Tor relays of ours"
-       paper: four
-       data:  4 stage codes per run in trajectories, 4 in run metadata (codes ['EG', 'IP', 'M1', 'VG'])
 [PASS] "Across the nine end-to-end experiments, the attack successfully reconstructed the complete introduction path in every run."
        paper: nine (9 of 9 succeeded)
        data:  9 of 9 runs converged at all 4 stages (36/36 stages reach |I|=1)
@@ -42,9 +22,6 @@
 [PASS] "median of 260 iterations, ranging from 101 to 770 iterations across runs"
        paper: 260; 101; 770
        data:  median=260; min=101; max=770 [N per run: R1(raw 4)=382, R2(raw 5)=131, R3(raw 6)=260, R4(raw 7)=152, R5(raw 8)=504, R6(raw 9)=770, R7(raw 10)=211, R8(raw 11)=260, R9(raw 12)=101]
-[PASS] "where N is the total number of iterations across the four stages"
-       paper: four
-       data:  4 stage codes per run in trajectories, 4 in run metadata (codes ['EG', 'IP', 'M1', 'VG'])
 [PASS] "when v=0, the median reconstruction takes 2.24 h and the slowest takes 6.63 h."
        paper: 2.24; 6.63
        data:  2.24; 6.63
@@ -66,9 +43,6 @@
 [PASS] "v_max ranges from 2.84 to 4.28 h despite a more than sevenfold difference in total iteration counts."
        paper: 2.84-4.28; sevenfold
        data:  2.84--4.28; 7.62-fold
-[PASS] "End-to-end reconstruction cost across the nine experiments"
-       paper: nine; 9 data rows in tab:end_to_end
-       data:  9 runs in trajectories (raw ids 4..12), 9 in run metadata
 [PASS] "Table tab:end_to_end row 1 (1 & 285 (830) & ...)"
        paper: 285 (830); 5 (5000); 61 (1200); 31 (9300); 382; 3.29; 7.29; 19.29; 3.68
        data:  285 (830); 5 (5000); 61 (1200); 31 (9300); 382; 3.29; 7.29; 19.29; 3.68
@@ -165,9 +139,6 @@
 [PASS] "the median iteration at which |I_i^(j)|<=10 was three"
        paper: 3
        data:  median(T<=10 over 36 stages) = 3
-[PASS] "Across the 36 stages in our empirical evaluation"
-       paper: 36
-       data:  36 distinct (run,stage) in trajectories; 36 rows in run metadata
 [PASS] "and 64% of stages reached this threshold within five iterations"
        paper: 64%
        data:  23/36 = 63.89% -> 64%
@@ -215,20 +186,11 @@
        data:  value 3/3; plateau 152, 148 (raw 6: trials 11..162, raw 8: trials 30..177); Tconv 163, 178
 
 == Section 7 ==
-[PASS] "We evaluated the attack in nine end-to-end experiments against a"
-       paper: nine
-       data:  9 runs in trajectories (raw ids 4..12), 9 in run metadata
 [PASS] "Across all nine experiments, the attack successfully reconstructed"
        paper: nine (all)
        data:  9 of 9 runs converged at all 4 stages (36/36 stages reach |I|=1)
 
 == Appendix A ==
-[PASS] "All 36 individual run-stage observations are presented in"
-       paper: 36; 36 rows in tab:run-stage-thresholds
-       data:  36 (run,stage) in trajectories; 36 run metadata rows
-[PASS] "Per-run, per-stage measurements for nine end-to-end runs (IDs 1-9)"
-       paper: nine; 1-9
-       data:  9 runs; paper ids 1..9 (raw 4..12)
 [PASS] "conducted on 7-10 January 2026."
        paper: 7-10 January 2026
        data:  2026-01-07 .. 2026-01-10 over 36 experiment_date; day_label Day 1..4 -> ['07', '08', '09', '10'] Jan
@@ -347,16 +309,5 @@
        paper: 86; 5; 18; 40; 40; 84; 4400
        data:  86; 5; 18; 40; 40; 84; 4400
 
-== Appendix B ==
-[PASS] "If the intersection still holds more than one pseudonym, the controller kills the probe client"
-       paper: more than one
-       data:  all 36 stages: |I_t| > 1 for every t < Tconv and |I_Tconv| = 1 (no trial recorded after convergence)
-[PASS] "If the cumulative intersection holds a single pseudonym, the stage is done"
-       paper: single (1)
-       data:  all 36 stages: T<=1(seq) == len(seq) and seq[-1]==1
-[PASS] "If the intersection is empty, the pinned path no longer holds and the run ends with the error \textscIntroductionCircuitDropped."
-       paper: empty (0)
-       data:  min(intersection_size) = 1 over 2771 rows; no empty intersection recorded
-
-PASS 115, FAIL 0; total 115
+PASS 100, FAIL 0; total 100
 ```
