@@ -147,7 +147,7 @@ _TEX_SUBS = [
     (r"\\texttt\{([^}]*)\}", r"\1"), (r"\\mathrm\{([^}]*)\}", r"\1"), (r"\\mathcal\{([^}]*)\}", r"\1"),
     (r"\\tilde\{([^}]*)\}", r"\1"), (r"\\(?:ref|eqref)\{[^}]*\}", "[ref]"), (r"~?\\cite\{[^}]*\}", ""),
     (r"\\label\{[^}]*\}", ""), (r"\\multicolumn\{\d+\}\{[^}]*\}\{([^}]*)\}", r"\1"),
-    (r"\\leq", "<="), (r"\\geq", ">="), (r"\\max", "max"), (r"\\min", "min"), (r"\\%", "%"),
+    (r"\\ldots", "..."), (r"\\cdots", "..."), (r"\\leq", "<="), (r"\\geq", ">="), (r"\\max", "max"), (r"\\min", "min"), (r"\\%", "%"),
     (r"\\,", " "), (r"\\\\", ""), (r"\\(?:midrule|toprule|bottomrule|addlinespace|noindent)", ""),
     (r"\$", ""), (r"~", " "), (r"--", "-"), (r"\\&", "&"), (r"[{}]", ""), (r"\s+", " "),
 ]
@@ -204,6 +204,46 @@ def apply_snapshot(rows, partial=False):
                          "status": "FAIL", "module": "snapshot",
                          "note": "claim is in the snapshot but no check produced it now; " + d["note"]})
     return rows
+
+
+_SECTION = [("main.tex", "Abstract"), ("01-", "Section 1"), ("02-", "Section 2"), ("03-", "Section 3"),
+            ("04-", "Section 4"), ("05-", "Section 5"), ("06-", "Section 6"), ("07-", "Section 7"),
+            ("appendix_results", "Appendix A"), ("implementation", "Appendix B"),
+            ("appendix_time", "Appendix C"), ("appendix_relay", "Appendix D")]
+
+
+def section_of(loc):
+    f = loc.split(":")[0]
+    for key, name in _SECTION:
+        if key in f:
+            return name
+    return f
+
+
+def _readable(v):
+    v = _squash(v)
+    return re.sub(r"\bTRAJ\b", "trajectories", re.sub(r"\bMET\b", "run metadata", v))
+
+
+def render_simple(rows, integ):
+    """What a reviewer reads: per claim, where it is in the paper, what the
+    paper says, the value printed there, the value recomputed from data/, and
+    PASS/FAIL."""
+    n = counts(rows)
+    out = []
+    cur = None
+    for r in rows:
+        sec = section_of(r["location"])
+        if sec != cur:
+            cur = sec
+            out += ["", f"== {sec} =="]
+        says = plain(r["quote"]) if r["quote"] else f"table row {r['id']}"
+        out += [f"[{r['status']}] \"{says}\"",
+                f"       paper: {plain(r['paper'])}",
+                f"       data:  {_readable(r['computed'])}"]
+    out += ["", ", ".join(f"{st} {n[st]}" for st in STATUSES) + f"; total {len(rows)}"
+            + (f"; DATA INTEGRITY MISMATCHES {len(integ)}" if integ else "")]
+    return "\n".join(out).lstrip("\n") + "\n"
 
 
 def render_checklist(rows, integ):
@@ -314,7 +354,7 @@ def render_report(rows, integ, full):
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--module", action="append", help="run only this checks/ module (repeatable)")
-    ap.add_argument("--full", action="store_true", help="do not truncate cells on the console")
+    ap.add_argument("--full", action="store_true", help="developer view: ids, source locations and notes")
     ap.add_argument("--out", default=str(DEFAULT_OUT), help="markdown report path ('' = do not write)")
     a = ap.parse_args(argv)
 
@@ -345,30 +385,25 @@ def main(argv=None):
         print(f"NO-SNAPSHOT: no main.tex under {C.ROOT} and no claims_snapshot.json; nothing to compare\n"
               "             against, every row is FAIL. Set PAPER_ROOT=<paper source dir> or restore\n"
               "             claims_snapshot.json. Recomputed values follow.\n")
-    print(render_table(rows, a.full or os.environ.get("VERIFY_FULL") == "1"))
+    full = a.full or os.environ.get("VERIFY_FULL") == "1"
     n = counts(rows)
-    print("\n" + ", ".join(f"{s} {n[s]}" for s in STATUSES)
-          + f"; total {len(rows)}; data-integrity mismatches {len(integ)}")
+    if full:   # developer view: ids, source locations, notes
+        print(render_table(rows, True))
+        print("\n" + ", ".join(f"{st} {n[st]}" for st in STATUSES)
+              + f"; total {len(rows)}; data-integrity mismatches {len(integ)}")
+    else:
+        print(render_simple(rows, integ), end="")
     if integ:
         print("\nDATA INTEGRITY MISMATCHES:")
         for x in integ:
             print("  " + x)
-    if n["FAIL"] and not no_snapshot:
-        print("\nFAILED CLAIMS (full text):")
-        for r in rows:
-            if r["status"] == "FAIL":
-                print(f"  {r['id']} [{r['location']}]\n    paper:    {r['paper']}\n"
-                      f"    computed: {r['computed']}\n    note:     {r['note']}")
     if a.out:
         out = Path(a.out)
         out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(render_report(rows, integ, full=True), encoding="utf-8")
+        out.write_text("```\n" + render_simple(rows, integ) + "```\n", encoding="utf-8")
         print(f"\nreport written to {out}")
         if not no_tex and not a.module:
             print(f"snapshot of {write_snapshot(rows)} claims written to {SNAPSHOT.name}")
-        if (snapshot_mode or not no_tex) and not a.module:
-            CHECKLIST.write_text(render_checklist(rows, integ), encoding="utf-8")
-            print(f"manual checklist written to {CHECKLIST}")
     if no_snapshot:
         return 2
     return 1 if (n["FAIL"] or integ) else 0

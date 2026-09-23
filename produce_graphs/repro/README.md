@@ -55,9 +55,7 @@ There are two modes:
   `data/` now. PASS means the frozen comparison passed and today's
   recomputation equals the frozen one; a changed dataset or check, a claim
   missing from the snapshot, or a snapshot claim no module produces any more
-  is FAIL. Both modes write `out/manual_checklist.md`: for every claim the
-  sentence to look for in the PDF, the value printed there and the recomputed
-  value, so each one can be checked by hand against the paper.
+  is FAIL. Both modes print, for every claim, the section of the paper, the sentence as printed (search for it in the PDF), the printed value, the value recomputed from `data/`, and PASS/FAIL; the same list is written to `out/verify_report.md`. `--full` adds claim ids, source locations and notes.
 
 If neither the sources nor `claims_snapshot.json` are available there is
 nothing to compare against: the run prints a `NO-SNAPSHOT` banner, lists every
@@ -82,7 +80,7 @@ emits, so `make tables` and the paper cannot drift apart.
 - `generate.py` — table bodies and figures.
 - `verify.py` — data-integrity check (both CSVs cover the same 36 run/stage
   pairs; the metrics file carries no precomputed columns to compare), discovery
-  of `checks/*.py`, snapshot replay, report and checklist.
+  of `checks/*.py`, snapshot replay and report.
 - `checks/` — one module per section or table of the paper; each exposes
   `claims(C, traj, metrics)` returning `{id, location, quote, paper, computed,
   status, note}` records with status PASS or FAIL:
@@ -100,7 +98,7 @@ emits, so `make tables` and the paper cannot drift apart.
 - `claims_snapshot.json` — sentence, printed value and recomputed value of every
   claim, frozen from the submitted version (input of reviewer mode).
 - `out/tables/` — the table bodies as last generated (committed for reference);
-  `out/verify_report.md` and `out/manual_checklist.md` — the last verify run.
+  `out/verify_report.md` — the last verify run.
 
 ## Adding a claim
 
