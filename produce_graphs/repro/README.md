@@ -52,7 +52,13 @@ to compute them once those inputs are available.
 ## Layout
 
 - `core.py` — data loading, statistics (`T_le`, `T_conv`, hours) and the shared
-  LaTeX helpers (comment-stripped `tex_lines`, `find_quote`, ...).
+  LaTeX helpers: comment-stripped `tex_lines`, `paper_files` (main.tex and
+  every active `\input`), and the single quote locator `locate_quote` /
+  `relocate` / `search_paper` that every module uses. A claim's registered
+  `file:line` is only the first place tried: the quote is then searched in the
+  whole file and in every active file, so the report shows where the text is
+  printed *now* (with a "moved from" note) and a quote printed nowhere is a
+  stale anchor, never a silent PASS.
 - `generate.py` — table bodies and figures.
 - `verify.py` — data-integrity check (both CSVs cover the same 36 run/stage
   pairs; the metrics file carries no precomputed columns to compare), discovery
@@ -66,8 +72,9 @@ to compute them once those inputs are available.
 
 Add a record to the module for that section (or a new `checks/<name>.py`; it is
 discovered automatically). Recompute the value from `traj` / `metrics`; parse
-the printed value from the `.tex` with `C.find_quote` so that an edited sentence
-is re-checked rather than silently matched. Run `make verify`.
+the printed value from the `.tex` with `C.relocate` / `C.search_paper` so that
+an edited or moved sentence is re-checked rather than silently matched. Run
+`make verify`.
 
 ## Verification report for the submitted version
 

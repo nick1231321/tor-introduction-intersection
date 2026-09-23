@@ -34,6 +34,8 @@ import statistics as st
 import re
 import traceback
 
+import core as _core   # shared tex helpers (single copy in core.py)
+
 
 # ----------------------------------------------------------------------------
 # helpers (pure Python, no numpy/scipy)
@@ -83,7 +85,22 @@ def _status(ok):
     return "PASS" if ok else "FAIL"
 
 
-def _mk(cid, loc, quote, paper, computed, status, note=""):
+def _mk(cid, loc, quote, paper, computed, status, note="", relocate=True):
+    """Claim record. With relocate=True the quote is re-located in the CURRENT
+    paper (core.relocate: registered file:line, then the whole file, then every
+    active file) so the reported location is where it is printed now; a quote
+    printed nowhere marks the claim FAIL (stale registry)."""
+    if relocate and quote:
+        st, where, mv = _core.relocate(loc, quote)
+        if st == "found":
+            loc = where
+            if mv:
+                note = f"[{mv}] " + note
+        elif st == "absent":
+            loc, status = where, "FAIL"
+            note = f"stale registry: {mv}. " + note
+        else:                       # nofile: keep status; verify.py marks it UNVERIFIABLE
+            note = f"{mv}. " + note
     return {"id": cid, "location": loc, "quote": quote, "paper": str(paper),
             "computed": str(computed), "status": status, "note": note}
 
@@ -314,21 +331,21 @@ def claims(C, traj, metrics):
               "seven": 7, "eight": 8, "nine": 9}
 
     def _stated_count(stage_word, cw):
+        """The live sentence is searched for in every active .tex file
+        (core.search_paper), the Discussion first; it currently lives in the
+        evaluation section."""
         rel = "sections/05-discussion.tex"
-        lines = C.tex_lines(rel)
-        if lines is None:
-            return None, None, f"{rel}:?"
-        text = C.norm_ws(" ".join(lines))
-        m = re.search(r"(\w+) of the (\w+) %s stages at CW \$%d\$" % (stage_word, cw), text)
-        if m:
+        hit = _core.search_paper(r"(\w+) of the (\w+) %s stages at CW \$%d\$" % (stage_word, cw), rel)
+        if hit:
+            frel, ln, m = hit
             phrase, total = m.group(0), _WORDS.get(m.group(2).lower())
         else:
-            m = re.search(r"the (\w+) %s stages at CW \$%d\$" % (stage_word, cw), text)
-            if not m:
+            hit = _core.search_paper(r"the (\w+) %s stages at CW \$%d\$" % (stage_word, cw), rel)
+            if not hit:
                 return None, None, f"{rel}:?"
+            frel, ln, m = hit
             phrase, total = m.group(0), _WORDS.get(m.group(1).lower())
-        _, ln = C.find_quote(rel, phrase[: min(len(phrase), 40)])
-        return phrase, total, f"{rel}:{ln if ln else '?'}"
+        return phrase, total, f"{frel}:{ln}"
 
     def _cw_claim(cid, stage_word, cw, group, other_id):
         phrase, total, loc = _stated_count(stage_word, cw)
@@ -336,12 +353,16 @@ def claims(C, traj, metrics):
         computed = f"{len(group)} {stage_word} stages at CW {cw} in MET [{listing}]"
         if phrase is None:
             out.append(_mk(cid, loc, f"{stage_word} stages at CW ${cw}$", "n/a", computed,
-                           "UNVERIFIABLE", "sentence about CW-matched stages not found in the live text"))
+                           "UNVERIFIABLE", "sentence about CW-matched stages not found in the live text",
+                           relocate=False))
             return
         status = _status(total == len(group))
+        moved = ("" if loc.startswith("sections/05-discussion.tex:")
+                 else "[moved from sections/05-discussion.tex] ")
         out.append(_mk(cid, loc, phrase, f"{cw}; {total}", computed, status,
-                       f"the sentence must count ALL {stage_word} stages at CW {cw} in the data "
-                       f"('X of the Y ...' counts Y). The listed Tconv values are checked by {other_id}."))
+                       f"{moved}the sentence must count ALL {stage_word} stages at CW {cw} in the "
+                       f"data ('X of the Y ...' counts Y). The listed Tconv values are checked by "
+                       f"{other_id}.", relocate=False))
 
     _cw_claim("conv-012", "Vanguard", 1200, vg1200, "conv-013")
 
@@ -367,7 +388,7 @@ def claims(C, traj, metrics):
         ok = all(got[r] is not None and got[r] == want[r] for r in want)
         return (f"{got[12]}, {got[11]} [Tconv(M1) of raw 12, 11 = R9, R8]", ok)
     _emit(out, "conv-015", "sections/05-discussion.tex:76",
-          "required $4$ and $53$, respectively",
+          "required $4$ and $53$",
           "4, 53", _c015,
           "Tconv of the M1 stages of paper runs 9 and 8 (raw 12, 11).")
 

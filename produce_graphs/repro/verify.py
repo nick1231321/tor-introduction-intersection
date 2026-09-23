@@ -141,23 +141,9 @@ def load_claims(traj, metrics, only=None):
 
 # ----------------------------------------------------------------------- ordering
 def paper_file_order():
-    """Files in the order the paper includes them: main.tex, then each \\input
-    of the ACTIVE part of main.tex (recursively), then anything else."""
-    order, seen = [], set()
-
-    def walk(rel):
-        if rel in seen:
-            return
-        seen.add(rel)
-        order.append(rel)
-        for ln in C.tex_lines(rel) or []:
-            for m in re.finditer(r"\\input\{([^}]+)\}", ln):
-                sub = m.group(1)
-                if not sub.endswith(".tex"):
-                    sub += ".tex"
-                walk(sub)
-    walk("main.tex")
-    return {rel: i for i, rel in enumerate(order)}
+    """{rel: rank} in the order the paper includes its files (core.paper_files:
+    main.tex, then each \\input of its ACTIVE text, recursively)."""
+    return {rel: i for i, rel in enumerate(C.paper_files())}
 
 
 def loc_key(loc, file_rank):

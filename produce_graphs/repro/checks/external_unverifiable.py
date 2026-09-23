@@ -196,8 +196,13 @@ def claims(C, traj, metrics) -> list[dict]:
     ln_cap, m_cap = _find_first(lat_clean, RE_CAPTION)
     ln_rep, m_rep = _find_first(lat_clean, RE_TRIALS_REPEAT)
     ln_mean, m_mean = _find_first(lat_clean, RE_TRIALS_MEAN)
-    ln_disc_rng, m_disc_rng = _find_first(disc_clean, RE_DISC_RANGE)
-    ln_age, m_age = _find_first(setup_clean, RE_AGE_RANGE)
+    # These two sentences are located anywhere in the active paper (preferred
+    # file first): the "complete in a--b s" restatement moved from the
+    # Discussion into the evaluation section in a later revision.
+    hit = _core.search_paper(RE_DISC_RANGE, DISC_TEX)
+    disc_rel, ln_disc_rng, m_disc_rng = hit if hit else (DISC_TEX, None, None)
+    hit = _core.search_paper(RE_AGE_RANGE, SETUP_TEX)
+    age_rel, ln_age, m_age = hit if hit else (SETUP_TEX, None, None)
 
     stated_svc_a = int(m_svc_a.group(1)) if m_svc_a else None
     stated_svc_b = int(m_svc_b.group(1)) if m_svc_b else None
@@ -238,8 +243,10 @@ def claims(C, traj, metrics) -> list[dict]:
                 f"({t0s} - first_seen).days for each relay, expect min/max = {age_paper}. "
                 f"Experiment start = min(experiment_date) over run_stage_metrics.csv = {t0s}. "
                 f"run_stage_metrics.csv has no fingerprint/first_seen column.")
+    if age_rel != SETUP_TEX:
+        note = f"[moved from {SETUP_TEX}] " + note
     out.append(dict(
-        id="ext-001", location=_loc(SETUP_TEX, ln_age),
+        id="ext-001", location=_loc(age_rel, ln_age),
         quote="The relays had been active for $69$--$126$ days when the experiments began",
         paper=age_paper, computed=computed, status=status, note=note))
 
@@ -252,11 +259,12 @@ def claims(C, traj, metrics) -> list[dict]:
         st2 = ("PASS" if (_fmt(vmin) == disc_rng[0] and _fmt(vmax) == disc_rng[1]) else "FAIL")
         cmp2 = rng_str
     out.append(dict(
-        id="ext-002", location=_loc(DISC_TEX, ln_disc_rng),
+        id="ext-002", location=_loc(disc_rel, ln_disc_rng),
         quote="complete in $0.521$--$1.780$~s, depending on the service",
         paper=(f"{disc_rng[0]}--{disc_rng[1]}" if disc_rng else "range not found in tex"),
         computed=cmp2, status=st2,
-        note=(f"Range parsed from {DISC_TEX} at run time and compared with the min/max of "
+        note=((f"[moved from {DISC_TEX}] " if disc_rel != DISC_TEX else "")
+              + f"Range parsed from {disc_rel} at run time and compared with the min/max of "
               f"the {n_rows} Avg dt cells parsed from {LAT_TEX} (min={name_min}, "
               f"max={name_max}). Raw per-trial latencies are not in the project, so the "
               f"means themselves are unverifiable.")))

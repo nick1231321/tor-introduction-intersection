@@ -10,11 +10,14 @@ country list in the appendix, and consistency between restated constants) the
 module performs that check and downgrades the claim to FAIL if the cross-check
 contradicts the printed value.
 
-Every claim additionally verifies that its quoted text is actually printed
-at the stated location (lines loc-1..loc+1, whitespace-normalised); a quote
-that is no longer found there is reported as FAIL ("stale location") so that
-future restructuring of the paper cannot leave a CONSTANT claim silently
-pointing at the wrong line.
+Every claim additionally re-locates its quoted text in the CURRENT paper
+(core.relocate: the registered file:line first, then the whole file, then
+every active .tex file; whitespace-normalised, comments stripped). The report
+shows where the text is printed now and notes "moved from <registered anchor>"
+when that differs; a quote that is printed nowhere is reported as FAIL
+("stale anchor") so that restructuring the paper cannot leave a CONSTANT claim
+silently pointing at the wrong line. Textual cross-checks (const-027/028,
+const-039, const-046/047) read the located sentence, not a fixed line.
 
 Nothing is hard-coded as a "computed" value except the constant itself,
 which by definition is the thing being reported.
@@ -33,34 +36,19 @@ import core as _core   # shared tex helpers (single copy in core.py)
 # helpers (thin wrappers over core.py so every module shares one implementation)
 # ----------------------------------------------------------------------------
 
-def _tex_lines(C, rel: str, lo: int, hi: int) -> list[str]:
-    """Lines lo..hi (1-based, inclusive) of the CURRENT (comment-stripped) text."""
-    lines = _core.tex_lines(rel)
-    return lines[lo - 1:hi] if lines else []
-
-
-def _tex_line(C, rel: str, lineno: int) -> str:
-    lines = _tex_lines(C, rel, lineno, lineno)
-    return lines[0] if lines else ""
+def _text_at(quote: str, rel: str, lineno: int, extra: int = 1) -> str:
+    """Current text of the line on which `quote` starts (located anywhere in the
+    paper via core.locate_quote, the registered rel:lineno being only the first
+    place tried) plus the `extra` following lines, joined; '' if not located."""
+    found = _core.locate_quote(quote, rel, lineno)
+    if not found:
+        return ""
+    frel, fline = found
+    lines = _core.tex_lines(frel) or []
+    return " ".join(lines[fline - 1:fline + extra])
 
 
 _norm_ws = _core.norm_ws
-
-
-def _parse_loc(loc: str) -> tuple[str, int, int]:
-    """'file:41' -> (file, 41, 41); 'file:41-43' -> (file, 41, 43)."""
-    rel, _, span = loc.rpartition(":")
-    a, _, b = span.partition("-")
-    lo = int(a)
-    hi = int(b) if b else lo
-    return rel, lo, hi
-
-
-def _quote_at_location(C, loc: str, quote: str) -> bool:
-    """True iff the whitespace-normalised quote appears in lines lo-1..hi+1."""
-    rel, lo, hi = _parse_loc(loc)
-    window = _tex_lines(C, rel, max(1, lo - 1), hi + 1)
-    return _norm_ws(quote) in _norm_ws(" ".join(window))
 
 
 def _stage_start(row) -> tuple[str, str]:
@@ -109,11 +97,20 @@ def _count_countries(line: str) -> tuple[int, list[str]]:
 
 
 def _claim(C, cid, loc, quote, paper, computed, status, note):
-    """Build a claim dict; downgrade to FAIL if the quote is not printed at loc."""
-    if not _quote_at_location(C, loc, quote):
+    """Build a claim dict. The quote is re-located in the CURRENT paper
+    (core.relocate: registered file:line first, then the whole file, then every
+    active file); the reported location is where it is printed now. A quote
+    that is printed nowhere downgrades the claim to FAIL (stale anchor)."""
+    st, where, mv = _core.relocate(loc, quote)
+    if st == "absent":
         status = "FAIL"
-        note = f"stale location: quote not found at {loc}. " + note
-    return {"id": cid, "location": loc, "quote": quote, "paper": str(paper),
+        note = f"stale anchor: {mv}. " + note
+    elif st == "nofile":
+        status = "UNVERIFIABLE"
+        note = f"{mv}. " + note
+    elif mv:
+        note = f"[{mv}] " + note
+    return {"id": cid, "location": where, "quote": quote, "paper": str(paper),
             "computed": str(computed), "status": status, "note": note}
 
 
@@ -247,21 +244,22 @@ def claims(C, traj, metrics) -> list[dict]:
                         "a service-side path used for only about $10$~min, the lifetime of an ordinary Tor circuit",
                         "10", TOR_10MIN))
     # const-027 / const-028: proposal parameter restated; must agree textually.
-    l27 = _tex_line(C, "sections/05-discussion.tex", 17)
-    l33 = _tex_line(C, "sections/05-discussion.tex", 33)
+    # (The sentence is located in the current paper, not read at a fixed line.)
+    q27 = "approximately every $10$~min. Relay selection remains unchanged"
+    q28 = "even if a stage converges within a $10$-minute interval"
+    l27 = _text_at(q27, "sections/05-discussion.tex", 17)
+    l33 = _text_at(q28, "sections/05-discussion.tex", 33)
     v27 = re.search(r"every \$(\d+)\$~min", l27)
     v33 = re.search(r"\$(\d+)\$-minute", l33)
     v27 = v27.group(1) if v27 else None
     v33 = v33.group(1) if v33 else None
-    out.append(xcheck("const-027", "sections/05-discussion.tex:17",
-                      "approximately every $10$~min. Relay selection remains unchanged",
+    out.append(xcheck("const-027", "sections/05-discussion.tex:17", q27,
                       "10", v27 if v27 is not None else "tex line not found",
                       v27 == "10",
                       "proposal parameter chosen by the authors (matches MaxCircuitDirtiness); "
-                      "restated at line 33 (const-028)."))
-    out.append(xcheck("const-028", "sections/05-discussion.tex:33",
-                      "even if a stage converges within a $10$-minute interval",
-                      "10", f"{v33} (line 17 says {v27})",
+                      "restated in the same section (const-028)."))
+    out.append(xcheck("const-028", "sections/05-discussion.tex:33", q28,
+                      "10", f"{v33} (const-027 sentence says {v27})",
                       v33 == "10" and v33 == v27,
                       "proposal parameter; textual check that it equals const-027."))
     out.append(constant("const-029", "sections/05-discussion.tex:120",
@@ -315,16 +313,16 @@ def claims(C, traj, metrics) -> list[dict]:
                       "so the key count itself is not checkable."))
 
     # ---- appendix_relay_concentration --------------------------------------
-    l6 = _tex_line(C, "sections/appendix_relay_concentration.tex", 6)
+    q39 = ("Australia, Belgium, Canada, Denmark, France, Germany, Italy, the Netherlands, "
+           "New Zealand, Norway, Spain, Sweden, the United Kingdom, or the United States")
+    l6 = _text_at(q39, "sections/appendix_relay_concentration.tex", 6)
     n_countries, countries = _count_countries(l6)
     out.append(xcheck("const-038", "sections/appendix_relay_concentration.tex:4",
                       "We consider the Fourteen Eyes as a grouping of jurisdictions", "Fourteen (14)",
                       f"{n_countries} country names enumerated at line 6",
                       n_countries == 14,
                       "cited williams2023five; count of country names in line 6 of the same file."))
-    out.append(xcheck("const-039", "sections/appendix_relay_concentration.tex:6",
-                      "Australia, Belgium, Canada, Denmark, France, Germany, Italy, the Netherlands, "
-                      "New Zealand, Norway, Spain, Sweden, the United Kingdom, or the United States",
+    out.append(xcheck("const-039", "sections/appendix_relay_concentration.tex:6", q39,
                       "14 countries listed",
                       f"{n_countries}: {', '.join(countries)}" if countries else "enumeration not found",
                       n_countries == 14,
@@ -348,22 +346,24 @@ def claims(C, traj, metrics) -> list[dict]:
                         "same constant as const-044."))
 
     # ---- 04-setup restatements of delta ------------------------------------
-    l329 = _tex_line(C, "sections/04-setup-and-evaluation.tex", 329)
-    l370 = _tex_line(C, "sections/04-setup-and-evaluation.tex", 370)
-    l104 = _tex_line(C, "sections/implementation.tex", 104)
+    # (each sentence located in the current paper; the registered lines are fallbacks)
+    q46 = "The controller relaunches the client after $\\delta=30$~s"
+    q47 = "The $30$~s delay is a configurable\nparameter of our implementation"
+    q35 = "$\\delta=30$~s, and repeats steps~6a--13 against the same relay"
+    l329 = _text_at(q46, "sections/04-setup-and-evaluation.tex", 329)
+    l370 = _text_at(q47, "sections/04-setup-and-evaluation.tex", 370)
+    l104 = _text_at(q35, "sections/implementation.tex", 104)
     d329 = re.search(r"\\delta=(\d+)\$~s", l329)
     d370 = re.search(r"The \$(\d+)\$~s delay", l370)
     d104 = re.search(r"\\delta=(\d+)\$~s", l104)
     d329, d370, d104 = (m.group(1) if m else None for m in (d329, d370, d104))
-    out.append(xcheck("const-046", "sections/04-setup-and-evaluation.tex:329",
-                      "The controller relaunches the client after $\\delta=30$~s", "30",
-                      f"tex: {d329}; implementation.tex:104 says {d104}",
+    out.append(xcheck("const-046", "sections/04-setup-and-evaluation.tex:329", q46, "30",
+                      f"tex: {d329}; implementation.tex (const-035 sentence) says {d104}",
                       d329 == "30" and d329 == d104,
                       "implementation parameter (same as const-035); textual check only that it equals "
-                      "implementation.tex:104."))
-    out.append(xcheck("const-047", "sections/04-setup-and-evaluation.tex:370",
-                      "The $30$~s delay is a configurable\nparameter of our implementation", "30",
-                      f"tex: {d370}; line 329 says {d329}; implementation.tex:104 says {d104}",
+                      "the implementation.tex statement."))
+    out.append(xcheck("const-047", "sections/04-setup-and-evaluation.tex:370", q47, "30",
+                      f"tex: {d370}; const-046 sentence says {d329}; implementation.tex says {d104}",
                       d370 == "30" and d370 == d329 == d104,
                       "implementation parameter; textual check that it equals const-035/046."))
 

@@ -10,12 +10,15 @@ declared in repro/generate.py, and, for purely textual counts, by counting
 items in the CURRENT .tex sources (comment environments and %-lines are
 stripped before counting).
 
-Every claim's quoted text is re-located in the current .tex at the stated
-file:line (a small window around it); a quote that is no longer there marks
-the claim FAIL ('stale registry') regardless of the numeric outcome, so a
-restructured paper cannot produce a silent PASS.  Textual-count claims find
-their paragraph by anchor sentence, not by line number, and report the line
-on which the anchor was found.
+Every claim's quoted text is re-located in the CURRENT paper (core.relocate:
+the registered file:line first, then the whole file, then every active .tex
+file reachable from main.tex); the report shows where it is printed now and
+notes "moved from <registered anchor>" when that differs. A quote that is
+printed nowhere marks the claim FAIL ('stale registry') regardless of the
+numeric outcome, so a restructured paper cannot produce a silent PASS (the
+one documented exception, setup-012, whose sentence was removed from the
+paper, is reported UNVERIFIABLE). Textual-count claims find their paragraph
+by anchor sentence anywhere in the paper, not by line number.
 
 Nothing is hard-coded from the paper except the printed value being tested;
 every 'computed' field is derived at call time from traj/metrics/files.
@@ -91,21 +94,26 @@ def _stage_start(row):
     return (_stage_date(row), _hhmm(row))
 
 
-def _quote_at(C, loc, quote, window=(1, 3)):
-    """True if `quote` (whitespace-normalised) is found in the current .tex in
-    the lines loc-window[0] .. loc+window[1]; False if not; None if the file
-    cannot be read.  Comment blocks and %-lines are blanked first.  A long
-    quote also matches on its first 40 characters (line-wrapping tolerance)."""
-    try:
-        rel, ln = loc.rsplit(":", 1)
-        ln = int(ln)
-    except ValueError:
-        return None
-    found = _core.quote_near(rel, ln, quote, before=window[0], after=window[1])
-    if found or found is None:
-        return found
-    q = _norm(quote)
-    return len(q) > 40 and bool(_core.quote_near(rel, ln, q[:40], before=window[0], after=window[1]))
+def _relocate(loc, quote):
+    """(status, location, note) of a registry anchor in the CURRENT paper via
+    core.relocate (registered file:line first, then the whole file, then every
+    active file; comment blocks and %-lines blanked, whitespace normalised).
+    A long quote is also tried on its first 40 characters (line-wrapping
+    tolerance, as before) before being declared absent."""
+    st, where, note = _core.relocate(loc, quote)
+    if st == "absent":
+        q = _norm(quote)
+        if len(q) > 40:
+            st2, where2, note2 = _core.relocate(loc, q[:40])
+            if st2 == "found":
+                return st2, where2, note2
+    return st, where, note
+
+
+def _anchor(anchor, preferred_rel):
+    """(rel, line) of the first line containing `anchor` anywhere in the active
+    paper (preferred file first), or None."""
+    return _core.locate_quote(anchor, preferred_rel)
 
 
 # --------------------------------------------------------------------------
@@ -244,14 +252,26 @@ def claims(C, traj, metrics):
     root = _root(C)
     STALE = "quote not found at location (stale registry)"
 
-    def add(cid, loc, quote, paper, computed, status, note=""):
-        found = _quote_at(C, loc, quote)
-        if found is False:
-            status = "FAIL"
-            note = (STALE + ("; " + note if note else ""))
-        elif found is None and status == "PASS":
-            status = "UNVERIFIABLE"
+    def add(cid, loc, quote, paper, computed, status, note="", absent_status="FAIL",
+            absent_note=STALE, absent_loc=None):
+        """Append a claim whose quote is re-located in the current paper; the
+        reported location is where the quote is printed NOW, `loc` only the
+        registered fallback anchor. A quote printed nowhere gets absent_status
+        (FAIL = stale registry, unless the caller documents otherwise) and the
+        location absent_loc (default 'file:?')."""
+        st_, where, mv = _relocate(loc, quote)
+        if st_ == "absent":
+            status = absent_status
+            note = (absent_note + ("; " + note if note else ""))
+            loc = absent_loc or where
+        elif st_ == "nofile":
+            if status == "PASS":
+                status = "UNVERIFIABLE"
             note = ("quoted .tex file unreadable" + ("; " + note if note else ""))
+        else:
+            loc = where
+            if mv:
+                note = f"[{mv}]" + ("; " + note if note else "")
         out.append({"id": cid, "location": loc, "quote": quote,
                     "paper": str(paper), "computed": str(computed),
                     "status": status, "note": note})
@@ -290,27 +310,26 @@ def claims(C, traj, metrics):
         "number of stages $K$ ($K=4$ for a service-side introduction circuit)",
         "4", four_comp, st(four_ok), "Same test as setup-002.")
 
-    # ---- setup-005 (textual, anchor-located) ----
-    lines = _tex_lines(C, "sections/03-attack.tex")
+    # ---- setup-005 (textual, anchor-located anywhere in the active paper) ----
     q5 = "reconstruction relies on three assumptions."
-    if lines is None:
+    hit5 = _anchor("relies on three assumptions", "sections/03-attack.tex")
+    if not _core.paper_present():
         add("setup-005", "sections/03-attack.tex:?", q5, "three", "n/a",
-            "UNVERIFIABLE", "sections/03-attack.tex not found.")
+            "UNVERIFIABLE", "paper sources not found.")
+    elif hit5 is None:
+        out.append({"id": "setup-005", "location": "sections/03-attack.tex:?",
+                    "quote": q5, "paper": "three", "computed": "n/a",
+                    "status": "FAIL", "note": "quote not found in current .tex"})
     else:
-        i5 = _find_anchor(lines, "relies on three assumptions")
-        if i5 is None:
-            out.append({"id": "setup-005", "location": "sections/03-attack.tex:?",
-                        "quote": q5, "paper": "three", "computed": "n/a",
-                        "status": "FAIL", "note": "quote not found in current .tex"})
-        else:
-            para = _paragraph_around(lines, i5)
-            starters = [w for w in ("First", "Second", "Third", "Fourth", "Fifth")
-                        if re.search(r"(^|[.\s])" + w + r",", para)]
-            add("setup-005", f"sections/03-attack.tex:{i5}", q5, "three",
-                f"{len(starters)} enumerated ({', '.join(starters)})",
-                st(len(starters) == 3 and starters == ["First", "Second", "Third"]),
-                "Textual count of 'First,/Second,/Third,' sentence starters in the "
-                f"paragraph containing the anchor (found at line {i5}).")
+        rel5, i5 = hit5
+        para = _paragraph_around(_tex_lines(C, rel5), i5)
+        starters = [w for w in ("First", "Second", "Third", "Fourth", "Fifth")
+                    if re.search(r"(^|[.\s])" + w + r",", para)]
+        add("setup-005", f"{rel5}:{i5}", q5, "three",
+            f"{len(starters)} enumerated ({', '.join(starters)})",
+            st(len(starters) == 3 and starters == ["First", "Second", "Third"]),
+            "Textual count of 'First,/Second,/Third,' sentence starters in the "
+            f"paragraph containing the anchor (found at {rel5}:{i5}).")
 
     # ---- setup-006 ----
     add("setup-006", "sections/04-setup-and-evaluation.tex:267",
@@ -368,25 +387,26 @@ def claims(C, traj, metrics):
                              if not re.search(r"onion-service daemon", r, re.I))
     q9 = "The monitored relay runs four processes: (i)~a capture process"
     ev = _tex_lines(C, "sections/04-setup-and-evaluation.tex")
-    i9 = _find_anchor(ev, "runs four processes") if ev else None
+    hit9 = _anchor("runs four processes", "sections/04-setup-and-evaluation.tex")
+    rel9, i9 = hit9 if hit9 else ("sections/04-setup-and-evaluation.tex", None)
     if comp_rows is None:
-        add("setup-009", f"sections/04-setup-and-evaluation.tex:{i9 or '?'}", q9,
+        add("setup-009", f"{rel9}:{i9 or '?'}", q9,
             "four", "n/a", "UNVERIFIABLE", "tab:impl-components not parseable.")
     elif i9 is None:
-        out.append({"id": "setup-009", "location": "sections/04-setup-and-evaluation.tex:?",
+        out.append({"id": "setup-009", "location": f"{rel9}:?",
                     "quote": q9, "paper": "four", "computed": "n/a",
                     "status": "FAIL", "note": "quote not found in current .tex"})
     else:
-        para = _paragraph_around(ev, i9)
+        para = _paragraph_around(_tex_lines(C, rel9), i9)
         romans = re.findall(r"\((i|ii|iii|iv|v|vi)\)~?", para)
         n_rom = len(set(romans))
         ok9 = n_on_relay == 4 and n_rom == 4
-        add("setup-009", f"sections/04-setup-and-evaluation.tex:{i9}", q9, "four",
+        add("setup-009", f"{rel9}:{i9}", q9, "four",
             f"{len(comp_rows)} component rows in tab:impl-components, {n_on_relay} on "
             f"the monitored relay; {n_rom} enumerated processes (i)..({romans[-1] if romans else '-'}) in the paragraph",
             st(ok9),
             "Textual consistency: table rows minus the Onion-service daemon row "
-            f"(service host) and the (i)-(iv) enumeration in the paragraph at line {i9}.")
+            f"(service host) and the (i)-(iv) enumeration in the paragraph at {rel9}:{i9}.")
 
     # ---- setup-010 ----
     add("setup-010", "sections/04-setup-and-evaluation.tex:366",
@@ -402,16 +422,31 @@ def claims(C, traj, metrics):
         if m:
             n_rows_e2e = len(re.findall(r"^\s*(\d+)\s*&", m.group(1), re.M))
     ok11 = nine_ok and n_rows_e2e == 9
+    # caption of tab:end_to_end ("... across the nine experiments: iterations to
+    # convergence per stage ..."); the opening clause is the anchor
     add("setup-011", "sections/04-setup-and-evaluation.tex:416",
-        "End-to-end reconstruction cost across the nine experiments.",
+        "End-to-end reconstruction cost across the nine experiments",
         "nine", f"{nine_comp}; {n_rows_e2e} data rows in tab:end_to_end", st(ok11),
         "Same test as setup-001 plus count of numbered data rows between the "
         "\\midrule markers of the end-to-end table.")
 
     # ---- setup-012 ----
+    # The caption sentence "Total is the sum $N$ across the four stages." was
+    # dropped when the caption was shortened; no other live sentence states the
+    # four stages that is not already covered (setup-010 at the cost equation,
+    # setup-020 in the implementation appendix). The claim is kept with its old
+    # anchor: if the sentence comes back it is checked again, otherwise it is
+    # reported UNVERIFIABLE rather than FAIL.
+    cap = _anchor("End-to-end reconstruction cost across the nine experiments",
+                  "sections/04-setup-and-evaluation.tex")
     add("setup-012", "sections/04-setup-and-evaluation.tex:419",
         "Total is the sum $N$ across the four stages.",
-        "four", four_comp, st(four_ok), "Same test as setup-002.")
+        "four", four_comp, st(four_ok), "Same test as setup-002.",
+        absent_status="UNVERIFIABLE",
+        absent_note="sentence removed from the paper (tab:end_to_end caption shortened; "
+                    "location = the current caption); the four-stage count is still "
+                    "verified by setup-010 and setup-020",
+        absent_loc=f"{cap[0]}:{cap[1]}" if cap else None)
 
     # ---- setup-013 ----
     n_pairs = len(set(traj.keys()))
@@ -695,26 +730,26 @@ def claims(C, traj, metrics):
             "the generate.py panel groups. ASSUMPTION: committed PDFs were produced by "
             "the current generate.py (figures are not regenerated here).")
 
-    # ---- setup-032 (textual, anchor-located) ----
-    disc = _tex_lines(C, "sections/05-discussion.tex")
+    # ---- setup-032 (textual, anchor-located anywhere in the active paper;
+    #      the Limitations paragraph moved from the Discussion into the evaluation) ----
     q32 = "Our evaluation has two main limitations."
-    if disc is None:
+    hit32 = _anchor("two main limitations", "sections/05-discussion.tex")
+    if not _core.paper_present():
         add("setup-032", "sections/05-discussion.tex:?", q32, "2", "n/a",
-            "UNVERIFIABLE", "05-discussion.tex not found.")
+            "UNVERIFIABLE", "paper sources not found.")
+    elif hit32 is None:
+        out.append({"id": "setup-032", "location": "sections/05-discussion.tex:?",
+                    "quote": q32, "paper": "2", "computed": "n/a",
+                    "status": "FAIL", "note": "quote not found in current .tex"})
     else:
-        i32 = _find_anchor(disc, "two main limitations")
-        if i32 is None:
-            out.append({"id": "setup-032", "location": "sections/05-discussion.tex:?",
-                        "quote": q32, "paper": "2", "computed": "n/a",
-                        "status": "FAIL", "note": "quote not found in current .tex"})
-        else:
-            para = _paragraph_around(disc, i32)
-            starters = [w for w in ("First", "Second", "Third", "Fourth")
-                        if re.search(r"(^|[.\s])" + w + r",", para)]
-            add("setup-032", f"sections/05-discussion.tex:{i32}", q32, "2",
-                f"{len(starters)} enumerated ({', '.join(starters)})",
-                st(starters == ["First", "Second"]),
-                "Textual count of 'First,'/'Second,' sentence starters (and absence of "
-                f"'Third,') in the Limitations paragraph containing the anchor (line {i32}).")
+        rel32, i32 = hit32
+        para = _paragraph_around(_tex_lines(C, rel32), i32)
+        starters = [w for w in ("First", "Second", "Third", "Fourth")
+                    if re.search(r"(^|[.\s])" + w + r",", para)]
+        add("setup-032", f"{rel32}:{i32}", q32, "2",
+            f"{len(starters)} enumerated ({', '.join(starters)})",
+            st(starters == ["First", "Second"]),
+            "Textual count of 'First,'/'Second,' sentence starters (and absence of "
+            f"'Third,') in the Limitations paragraph containing the anchor ({rel32}:{i32}).")
 
     return out

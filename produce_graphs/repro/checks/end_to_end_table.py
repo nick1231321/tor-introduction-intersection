@@ -23,9 +23,13 @@ import statistics as st
 from decimal import Decimal, ROUND_HALF_UP
 from fractions import Fraction
 
+import core as _core   # shared tex helpers (single copy in core.py)
+
 TEX = "sections/04-setup-and-evaluation.tex"
 
-# (paper run, tex line, printed row) -- transcribed verbatim from the .tex
+# (paper run, tex line, printed row) -- transcribed verbatim from the .tex.
+# The line is only the fallback anchor: each row is re-located in the current
+# paper by its leading cells (core.relocate) and the report shows that line.
 ROWS = [
     (1, 462, "285 (830); 5 (5000); 61 (1200); 31 (9300); 382; 3.29; 7.29; 19.29; 3.68"),
     (2, 465, "52 (850); 13 (5000); 4 (1200); 62 (9300); 131; 1.13; 5.13; 17.13; 4.22"),
@@ -87,6 +91,18 @@ def _fmt_row(C, tconv, cw, N, h: Fraction):
     return "; ".join(cells)
 
 
+def _locate_row(anchor_line, row_quote):
+    """(location, status, note) of a printed table row: the row's leading cells
+    (e.g. '1 & 285 (830) &') are re-located in the CURRENT paper via
+    core.relocate, the transcribed line being only the first place tried."""
+    st, where, mv = _core.relocate(f"{TEX}:{anchor_line}", row_quote)
+    if st == "found":
+        return where, None, (f"[{mv}] " if mv else "")
+    if st == "absent":
+        return where, "FAIL", f"transcription stale: {mv}. "
+    return f"{TEX}:{anchor_line}", None, f"{mv}. "
+
+
 def claims(C, traj, metrics):
     out = []
     per_run = {}
@@ -96,12 +112,17 @@ def claims(C, traj, metrics):
         per_run[rid] = (tconv, N, h)
         computed = _fmt_row(C, tconv, cw, N, h)
         notes = []
+        # the printed row is located by its first two cells as transcribed
+        first_cell = paper.split(";")[0].strip()
+        location, loc_status, loc_note = _locate_row(line, f"{p} & {first_cell} &")
         # consistency: trajectory-derived T_conv == number of recorded trials
         for s in C.STAGES:
             if len(traj[(rid, s)]) != tconv[s]:
                 notes.append(f"{s}: trajectory T_conv={tconv[s]}, len(seq)={len(traj[(rid, s)])}")
         status = "PASS" if computed == paper and not notes else "FAIL"
-        note = (f"raw run {rid}; h={h} = {float(h):.6f} exact; v=1h/v=4h/v_max computed "
+        if loc_status:
+            status = loc_status
+        note = (f"{loc_note}raw run {rid}; h={h} = {float(h):.6f} exact; v=1h/v=4h/v_max computed "
                 f"exactly on rationals, then ROUND_HALF_UP to 2 dp.")
         if notes:
             note += " Inconsistency: " + "; ".join(notes)
@@ -111,9 +132,9 @@ def claims(C, traj, metrics):
                        ("(18-h)/4", (LIFETIME_H - h) / V_MAX_DIVISOR)):
             if (x * 1000).denominator == 1 and (x * 1000).numerator % 10 == 5:
                 note += f" {lbl} = {float(x)} is an exact tie: half-up -> {r2(x)}."
-        out.append({"id": f"e2e-{p:03d}", "location": f"{TEX}:{line}",
-                    "quote": f"Table tab:end_to_end row {p}", "paper": paper,
-                    "computed": computed, "status": status, "note": note})
+        out.append({"id": f"e2e-{p:03d}", "location": location,
+                    "quote": f"Table tab:end_to_end row {p} ({p} & {first_cell} & ...)",
+                    "paper": paper, "computed": computed, "status": status, "note": note})
 
     # Median row: column-wise medians over the 9 runs (exact: statistics.median
     # on ints / Fractions never touches floats; n=9 is odd so no averaging).
@@ -131,11 +152,16 @@ def claims(C, traj, metrics):
 
     computed = "; ".join([_int(med_t[s]) for s in C.STAGES] +
                          [_int(med_N), r2(med_h), r2(med_h1), r2(med_h4), r2(med_vmax)])
-    out.append({"id": "e2e-010", "location": f"{TEX}:{MEDIAN_LINE}",
-                "quote": "Table tab:end_to_end Median row", "paper": MEDIAN_PAPER,
-                "computed": computed,
-                "status": "PASS" if computed == MEDIAN_PAPER else "FAIL",
-                "note": "Column-wise medians over 9 runs (each column independently; "
+    med_cells = [c.strip() for c in MEDIAN_PAPER.split(";")]
+    med_quote = "\\textbf{Median} & " + " & ".join(med_cells[:2]) + " &"
+    location, loc_status, loc_note = _locate_row(MEDIAN_LINE, med_quote)
+    status = "PASS" if computed == MEDIAN_PAPER else "FAIL"
+    if loc_status:
+        status = loc_status
+    out.append({"id": "e2e-010", "location": location,
+                "quote": f"Table tab:end_to_end Median row ({med_quote} ...)", "paper": MEDIAN_PAPER,
+                "computed": computed, "status": status,
+                "note": f"{loc_note}Column-wise medians over 9 runs (each column independently; "
                         "stage medians need not sum to median N). Odd n=9 so medians are "
                         "exact data values."})
     return out

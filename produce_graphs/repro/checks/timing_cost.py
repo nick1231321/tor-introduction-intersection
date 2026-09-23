@@ -22,12 +22,14 @@ Every record carries a "basis" key so the aggregator can separate them:
     "constant"       definitional / implementation parameter
 The "computed" string of paper-internal records is prefixed "appendix-table:".
 
-Live quote check: after building every record, the stored "quote" is searched
-for (whitespace-normalised, comments and \\begin{comment} blocks stripped) in
-the CURRENT .tex file named in "location". If it is not found the record is
-downgraded to FAIL ("quote not found in current tex"); if it is found at a
-different line, the location is updated and the move is noted. The
-hard-coded quotes are therefore checked at run time, not just documented.
+Live quote check: after building every record, the stored "quote" is re-located
+(core.relocate: whitespace-normalised, comments and \\begin{comment} blocks
+stripped) in the CURRENT paper: first near the registered line of the file
+named in "location", then in that whole file, then in every active .tex file.
+The reported location is where the quote is printed now ("moved from" is
+noted when that differs); a quote printed nowhere downgrades the record to
+FAIL. The hard-coded quotes are therefore checked at run time, not just
+documented.
 """
 from __future__ import annotations
 
@@ -69,30 +71,23 @@ def _read_tex(rel):
 
 
 _norm = _core.norm_ws
-_find_quote = _core.find_quote   # ('found', line) | ('absent', None) | ('nofile', None)
-
-
-def _stated_line(loc):
-    m = re.search(r":(\d+)", loc)
-    return int(m.group(1)) if m else None
 
 
 def _live_quote_check(claim):
-    """Assert the stored quote is present near the stated line of the CURRENT tex."""
-    rel = claim["location"].rsplit(":", 1)[0]
-    status, line = _find_quote(rel, claim["quote"])
-    if status == "nofile":
+    """Re-locate the stored quote in the CURRENT paper (core.relocate: the
+    registered file:line first, then the whole file, then every active file).
+    The reported location is where the quote is printed now."""
+    st, where, mv = _core.relocate(claim["location"], claim["quote"], window=LINE_TOL)
+    if st == "nofile":
+        claim["status"] = "UNVERIFIABLE"
+        claim["note"] = f"{mv}; " + claim["note"]
+    elif st == "absent":
         claim["status"] = "FAIL"
-        claim["note"] = f"tex file {rel} not found; " + claim["note"]
-    elif status == "absent":
-        claim["status"] = "FAIL"
-        claim["note"] = "quote not found in current tex (STALE claim); " + claim["note"]
+        claim["note"] = f"STALE claim: {mv}; " + claim["note"]
+        claim["location"] = where
     else:
-        stated = _stated_line(claim["location"])
-        if stated is not None and abs(line - stated) > LINE_TOL:
-            claim["note"] += f" [quote moved: stated line {stated}, now line {line}]"
-            claim["location"] = re.sub(r":\d+(--\d+)?$", f":{line}", claim["location"])
-        claim["note"] += " [quote verified in current tex]"
+        claim["location"] = where
+        claim["note"] += (f" [{mv}]" if mv else "") + " [quote verified in current tex]"
     return claim
 
 
@@ -355,11 +350,12 @@ def claims(C, traj, metrics):
         f"floor = {math.floor(ratio)}."))
 
     # ---- time-013: bold cells == T > 18 in tab:end_to_end
+    #   anchored to the table caption's bold rule: "... costs $v$ (bold: exceeds $18$~h)"
+    q013 = "costs $v$ (bold: exceeds $18$~h)."
     rows, err = _table_rows()
     if rows is None:
         out.append(_claim(
-            "time-013", f"{SETUP}:421",
-            "with values exceeding the $18$~h bound shown in bold.",
+            "time-013", f"{SETUP}:421", q013,
             "18", "n/a", "UNVERIFIABLE", f"could not parse tab:end_to_end: {err}"))
     else:
         problems = []
@@ -398,8 +394,7 @@ def claims(C, traj, metrics):
         n_exceed = sum(1 for N_exp in expected_labels.values()
                        for v in (0.0, 1.0, 4.0) if _T(N_exp, v) > BOUND_H)
         out.append(_claim(
-            "time-013", f"{SETUP}:421",
-            "with values exceeding the $18$~h bound shown in bold.",
+            "time-013", f"{SETUP}:421", q013,
             "18", f"bold cells: {n_bold}; cells with T>18: {n_exceed}",
             "PASS" if not problems else "FAIL",
             (f"checked {checked} T cells + {len(expected_labels)} v_max cells in "

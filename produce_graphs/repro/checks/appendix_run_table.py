@@ -168,9 +168,9 @@ def _parse_row(quote: str, p: int, s: str):
 
 
 def _table_body(lines):
-    """(first line no, active body lines) of tab:run-stage-thresholds: the
-    non-blank lines strictly between the header's \\midrule and \\bottomrule,
-    or (None, None) if the table cannot be located."""
+    """(first line no, [(line no, text)] of the active body) of
+    tab:run-stage-thresholds: the non-blank lines strictly between the header's
+    \\midrule and \\bottomrule, or (None, None) if the table cannot be located."""
     if lines is None:
         return None, None
     lab = next((i for i, l in enumerate(lines, 1) if TABLE_LABEL in l), None)
@@ -180,8 +180,30 @@ def _table_body(lines):
     bot = next((i for i in range(lab, len(lines) + 1) if lines[i - 1].strip().startswith(r"\bottomrule")), None)
     if mid is None or bot is None or bot <= mid:
         return None, None
-    body = [lines[i - 1].strip() for i in range(mid + 1, bot) if lines[i - 1].strip()]
+    body = [(i, lines[i - 1].strip()) for i in range(mid + 1, bot) if lines[i - 1].strip()]
     return mid + 1, body
+
+
+def _row_lines(body):
+    """{(paper run, stage): line no} of the printed rows, located in the CURRENT
+    table body: an 'Rp (...)' row starts run p (IP), the following non-run rows
+    are its M1, VG, EG rows in order. Rows that are not data rows (\\midrule
+    separators) are skipped."""
+    found, p, k = {}, None, 0
+    for ln, txt in body or []:
+        if not txt.endswith("\\\\"):
+            continue
+        first = txt.split("&", 1)[0].strip()
+        m = _IP_RE.match(first)
+        if m:
+            p, k = int(m.group(1)), 0
+        elif first != "" or p is None:
+            continue
+        else:
+            k += 1
+        if k < len(STAGE_LABEL):
+            found[(p, list(STAGE_LABEL)[k])] = ln
+    return found
 
 
 def _generate():
@@ -195,19 +217,29 @@ def claims(C, traj, metrics) -> list[dict]:
     out = []
     lines = _tex_lines()
 
-    # ---- app-001: column definitions still printed on lines 16-17
+    # ---- app-001: column definitions still printed (registered lines 16-17 are
+    #      only the first place tried; the definitions are located in the current file)
     def_ok = True
     def_note = ""
-    q16, q17 = _quote(lines, 16), _quote(lines, 17)
+    def_loc = {}
+    for n, txt in DEF_LINES.items():
+        hit = _core.locate_quote(txt, FILE, n)
+        def_loc[n] = hit[1] if hit and hit[0] == FILE else None
+    q16, q17 = (_quote(lines, def_loc[16]) if def_loc[16] else ""), \
+               (_quote(lines, def_loc[17]) if def_loc[17] else "")
     if lines is None:
         def_ok = False
         def_note = "could not read the .tex file"
     else:
-        missing = [str(n) for n, txt in DEF_LINES.items() if _quote(lines, n) != txt]
+        missing = [str(n) for n in DEF_LINES if def_loc[n] is None]
         if missing:
             def_ok = False
-            def_note = ("definition text stale: line(s) " + ", ".join(missing) +
-                        " no longer contain the expected T<=q / Tconv definitions")
+            def_note = ("definition text stale: the T<=q / Tconv definitions registered at "
+                        "line(s) " + ", ".join(missing) + " are no longer printed in the file")
+        moved = [f"{n}->{def_loc[n]}" for n in DEF_LINES if def_loc[n] and def_loc[n] != n]
+        if moved:
+            def_note = (def_note + " " if def_note else "") + \
+                       "[moved from " + ", ".join(f"{FILE}:{m}" for m in moved) + "]"
     n_rows = sum(1 for rid in C.RUN_IDS for s in C.STAGES if (rid, s) in traj and (rid, s) in metrics)
     if lines is None:
         status = "UNVERIFIABLE"
@@ -217,7 +249,8 @@ def claims(C, traj, metrics) -> list[dict]:
         status = "FAIL"
     out.append({
         "id": "app-001",
-        "location": f"{FILE}:16-17",
+        "location": (f"{FILE}:{def_loc[16]}-{def_loc[17]}" if def_loc[16] and def_loc[17]
+                     else f"{FILE}:?"),
         "quote": (q16 + " " + q17).strip() or r"$T_{\leq q}=\min\{t:|\mathcal{I}_t|\leq q\}$;",
         "paper": "T<=q = min t with |I_t|<=q; Tconv = min t with |I_t|=1; 36 rows",
         "computed": f"{n_rows}/36 run-stage rows available in TRAJ and MET; T<=q (q in 10,5,3,2), "
@@ -232,16 +265,26 @@ def claims(C, traj, metrics) -> list[dict]:
     })
 
     # ---- app-002..app-037: one claim per table row, in paper order (run-major, stage order)
+    # Each row is located in the CURRENT table body (run label + stage order);
+    # the TABLE line is only the fallback anchor.
+    body_line, body = _table_body(lines)
+    row_at = _row_lines(body)
     cid = 2
     for p in range(1, 10):
         rid = p + 3
         for s in C.STAGES:
-            line, g_day, g_hhmm, *g_nums = TABLE[(p, s)]
+            reg_line, g_day, g_hhmm, *g_nums = TABLE[(p, s)]
+            line = row_at.get((p, s), reg_line)
             quote = _quote(lines, line)
             comp = _computed_row(C, traj, metrics, rid, s)
             comp_parts = []
             note_parts = []
             status = "PASS"
+            if (p, s) not in row_at and lines is not None:
+                note_parts.append(f"row not located in the current table body; registered "
+                                  f"line {reg_line} read instead")
+            elif line != reg_line:
+                note_parts.append(f"[moved from {FILE}:{reg_line}]")
 
             # -- paper side: parsed from the current .tex line
             try:
@@ -300,7 +343,6 @@ def claims(C, traj, metrics) -> list[dict]:
             cid += 1
 
     # ---- app-body: the whole tabular body equals generate.py's output (modulo whitespace)
-    body_line, body = _table_body(lines)
     if body is None:
         out.append({"id": "app-body", "location": f"{FILE}:?", "quote": TABLE_LABEL,
                     "paper": "n/a", "computed": "n/a", "status": "UNVERIFIABLE",
@@ -309,7 +351,7 @@ def claims(C, traj, metrics) -> list[dict]:
         return out
     gen = _generate()
     gen_body = [l.strip() for l in gen.thresholds_body(traj, metrics).splitlines() if l.strip()]
-    norm_tex = [_core.norm_ws(l) for l in body]
+    norm_tex = [_core.norm_ws(l) for _, l in body]
     norm_gen = [_core.norm_ws(l) for l in gen_body]
     diffs = [f"body line {i + 1}: tex {a!r} vs generate.py {b!r}"
              for i, (a, b) in enumerate(zip(norm_tex, norm_gen)) if a != b]
