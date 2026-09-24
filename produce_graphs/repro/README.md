@@ -34,8 +34,8 @@ Python 3.9+, `matplotlib` (figures only).
   second-largest and maximum T_conv);
 - `out/tables/run_stage_thresholds_body.tex` — the appendix table with all 36
   run/stage rows;
-- `out/figures/threshold_summary.pdf`, `out/figures/runs_grid_{a,b,c}.pdf` —
-  the convergence figures of the appendix.
+- `out/figures/runs_grid_{a,b,c}.pdf` — the per-run convergence figures of
+  the appendix.
 
 The table bodies are the rows between `\midrule` and `\bottomrule` of the
 corresponding tables in the paper and can be compared with them line by line.

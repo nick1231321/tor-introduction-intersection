@@ -133,24 +133,6 @@ def table_stage_contrasts():
     w("stage_contrasts_body.tex", stage_contrasts_body(traj, metrics))
 
 
-# ---------- Figure: threshold_summary.pdf ----------
-def fig_threshold_summary():
-    med = {s: [st.median([C.T_le(traj[(rid, s)], q) for rid in C.RUN_IDS])
-               for q in C.THRESHOLDS] for s in C.STAGES}
-    x = range(len(C.THRESHOLDS)); nb = len(C.STAGES); wbar = 0.8 / nb
-    fig, ax = plt.subplots(figsize=(6.2, 3.4))
-    for i, s in enumerate(C.STAGES):
-        ax.bar([xi + (i - (nb - 1) / 2) * wbar for xi in x], med[s], wbar,
-               label=STAGE_TITLE[i], color=COLORS[s])
-    ax.set_yscale("log")
-    ax.set_xticks(list(x)); ax.set_xticklabels([f"$\\leq{q}$" for q in C.THRESHOLDS])
-    ax.set_xlabel(r"Threshold on $|\mathcal{I}_t|$"); ax.set_ylabel("Median trial $t$")
-    ax.legend(ncol=2, frameon=False, fontsize=9)
-    ax.grid(axis="y", ls=":", alpha=.5)
-    fig.tight_layout(); fig.savefig(FIGS / "threshold_summary.pdf"); plt.close(fig)
-    print("wrote", FIGS / "threshold_summary.pdf")
-
-
 # ---------- Figures: runs_grid_{a,b,c}.pdf ----------
 def figs_runs_grid():
     groups = {"a": [4, 5, 6], "b": [7, 8, 9], "c": [10, 11, 12]}
@@ -180,5 +162,4 @@ if __name__ == "__main__":
     table_end_to_end()
     table_thresholds()
     table_stage_contrasts()
-    fig_threshold_summary()
     figs_runs_grid()
