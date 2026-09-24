@@ -14,7 +14,6 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import core as C
 
-ROOT = C.ROOT
 OUT_T = Path(__file__).resolve().parent / "out" / "tables"
 # figures go to the paper's figures/ dir when it exists, else to ./out/figures
 FIGS = Path(os.environ.get("REPRO_FIGS") or
