@@ -207,26 +207,17 @@ pip3 install matplotlib requests
 The raw measurements of the nine end-to-end experiments are released in
 `produce_graphs/repro/data/`: the intersection size after every iteration of
 every run and stage, and per stage the run label (day, UTC time) and the
-monitored relay's consensus weight. The toolkit in `produce_graphs/repro/`
-regenerates from them every data-derived table and figure of the paper (the
-end-to-end cost table, the within-stage convergence table, the appendix table
-with all 36 run/stage rows, and the convergence figures):
+monitored relay's consensus weight. From them, `produce_graphs/repro/`
+regenerates every data-derived table and figure of the paper (the end-to-end
+cost table, the within-stage convergence table, the appendix table with all 36
+run/stage rows, and the convergence figures):
 
 ```
 cd produce_graphs/repro
 make tables          # tables -> out/tables/, figures -> out/figures/
-make verify          # recompute every number stated in the evaluation
 ```
 
-`make verify` recomputes every number from the data and compares it with the
-value printed in the paper. From a clean clone (no LaTeX sources) the printed
-values come from `produce_graphs/repro/claims_snapshot.json`, frozen from the
-submitted version; for every claim it prints the section, the sentence to find
-in the PDF, the printed value, the recomputed value and PASS/FAIL (also written
-to `produce_graphs/repro/out/verify_report.md`). With the sources available
-(`PAPER_ROOT=/path/to/paper make verify`) the printed values are read from the
-LaTeX text directly.
-See `produce_graphs/repro/README.md` for the data format and the list of checks.
+See `produce_graphs/repro/README.md` for the data format and the outputs.
 
 ---
 

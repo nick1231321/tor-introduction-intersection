@@ -18,7 +18,7 @@ ROOT = C.ROOT
 OUT_T = Path(__file__).resolve().parent / "out" / "tables"
 # figures go to the paper's figures/ dir when it exists, else to ./out/figures
 FIGS = Path(os.environ.get("REPRO_FIGS") or
-            (ROOT / "figures" if (ROOT / "figures").is_dir() else OUT_T.parent / "figures"))
+            OUT_T.parent / "figures")
 OUT_T.mkdir(parents=True, exist_ok=True)
 FIGS.mkdir(exist_ok=True)
 
