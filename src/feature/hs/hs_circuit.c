@@ -48,6 +48,7 @@
 #include "feature/nodelist/node_st.h"
 #include "core/or/origin_circuit_st.h"
 #include "feature/hs/hs_timing.h"
+#include "feature/hs/hs_window_signal.h"
 /** Helper: Free a pending rend object. */
 static inline void
 free_pending_rend(pending_rend_t *req)
@@ -1553,6 +1554,10 @@ hs_circ_send_introduce1(origin_circuit_t *intro_circ,
   if (BUG(payload_len < 0)) {
     goto close;
   }
+
+  /* Raise START to the colocated intersection plugin immediately before the
+   * INTRODUCE1 cell leaves the client, opening the observation window. */
+  hs_window_signal("start");
 
   if (relay_send_command_from_edge(CONTROL_CELL_ID, TO_CIRCUIT(intro_circ),
                                    RELAY_COMMAND_INTRODUCE1,

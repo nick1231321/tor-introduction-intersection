@@ -37,6 +37,7 @@
 #include "feature/nodelist/networkstatus.h"
 #include "feature/nodelist/nodelist.h"
 #include "feature/hs/hs_timing.h"
+#include "feature/hs/hs_window_signal.h"
 #include "feature/nodelist/routerset.h"
 #include "lib/crypt_ops/crypto_format.h"
 #include "lib/crypt_ops/crypto_rand.h"
@@ -1452,6 +1453,9 @@ handle_rendezvous2(origin_circuit_t *circ, const uint8_t *payload,
                            (void*)circ,
                            (const void*)circ->hs_ident->rendezvous_cookie,
                            sizeof(circ->hs_ident->rendezvous_cookie));
+  /* Raise STOP to the colocated intersection plugin on receiving RENDEZVOUS2,
+   * closing the observation window opened before INTRODUCE1. */
+  hs_window_signal("stop");
   ret = 0;
   goto end;
 
