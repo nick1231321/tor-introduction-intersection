@@ -193,50 +193,7 @@ chmod +x /exp/runner.sh
 
 ---
 
-## Reproducing Figures and Tables
-
-### Install Python dependencies
-```bash
-pip3 install matplotlib requests
-```
-
----
-
-### Dataset and evaluation tables/figures
-
-The raw measurements of the nine end-to-end experiments are released in
-`produce_graphs/repro/data/`: the intersection size after every iteration of
-every run and stage, and per stage the run label (day, UTC time) and the
-monitored relay's consensus weight. From them, `produce_graphs/repro/`
-regenerates every data-derived table and figure of the paper (the end-to-end
-cost table, the within-stage convergence table, the appendix table with all 36
-run/stage rows, and the convergence figures):
-
-```
-cd produce_graphs/repro
-make tables          # tables -> out/tables/, figures -> out/figures/
-```
-
-See `produce_graphs/repro/README.md` for the data format and the outputs.
-
----
-
-### Relay-concentration figures (jurisdiction appendix)
-
-Run:
-
-```
-python3 produce_graphs/generate_stats_and_graphs.py
-```
-
-This script downloads the current relay list from Onionoo and produces the
-top-15-countries plot and the Fourteen-Eyes selection-probability plot. The
-paper's figures were produced from the 30 November 2025 snapshot, so a fresh
-run gives current, slightly different numbers.
-
----
-
-### Introduction-handshake latency table (appendix)
+## Measuring the introduction-handshake latency
 
 Ensure no Tor process is running before executing the script.
 
